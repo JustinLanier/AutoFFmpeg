@@ -1,0 +1,153 @@
+[State]
+Type=Enum
+Items=Global Enabled;Opt-In;Disabled
+Category=Options
+CategoryOrder=0
+Index=0
+Label=State
+Default=Disabled
+Description=
+
+[JobNameFilter]
+Type=string
+Category=Options
+CategoryOrder=0
+CategoryIndex=1
+Label=Job Name Filter (python regular expression)
+Default=.+
+Description=Job Name Filter (python regular expression)
+
+[PluginNameFilter]
+Type=string
+Category=Options
+CategoryOrder=0
+CategoryIndex=2
+Label=Plugin Name Filter (python regular expression)
+Default=.+
+Description=Plugin Name Filter (python regular expression)
+
+[InputArgs]
+Type=string
+Category=Options
+CategoryOrder=0
+CategoryIndex=3
+Label=Input Args
+Default=
+Description=Additional FFmpeg input arguments
+
+[FrameRateOverride]
+Type=float
+Category=Options
+CategoryOrder=0
+CategoryIndex=4
+Label=Frame Rate Override (fps)
+Default=0
+Description=Force input framerate (0 = auto-detect). Example: 24.0, 25.0, 30.0, 60.0
+
+[EnableGPU]
+Type=boolean
+Category=H.265 Options
+CategoryOrder=1
+CategoryIndex=0
+Label=Enable GPU Acceleration
+Default=True
+Description=Use NVIDIA GPU (NVENC) for H.265 encoding. Requires compatible NVIDIA graphics card (GTX 10xx series or newer)
+
+[MaxWidth]
+Type=integer
+Category=H.265 Options
+CategoryOrder=1
+CategoryIndex=1
+Label=Maximum Width
+Default=3840
+Description=Maximum output width in pixels. Videos larger than this will be downscaled while maintaining aspect ratio
+
+[MaxHeight]
+Type=integer
+Category=H.265 Options
+CategoryOrder=1
+CategoryIndex=2
+Label=Maximum Height
+Default=2160
+Description=Maximum output height in pixels. Videos larger than this will be downscaled while maintaining aspect ratio
+
+[OutputArgs]
+Type=string
+Category=H.265 Options
+CategoryOrder=1
+CategoryIndex=3
+Label=Custom Output Args
+Default=
+Description=Additional FFmpeg output arguments to append to the optimal H.265 settings. Leave empty to use automatic optimal settings
+
+[EnableChunking]
+Type=boolean
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=0
+Label=Enable Parallel Encoding (Chunking)
+Default=False
+Description=Split encoding across multiple nodes for faster processing. Recommended for sequences over 500 frames.
+
+[ChunkSize]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=1
+Label=Chunk Size (Frames)
+Default=150
+Description=Number of frames per chunk. Smaller chunks = more parallelism but more overhead. Recommended: 100-200 frames.
+
+[MinChunks]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=2
+Label=Minimum Chunks
+Default=2
+Description=Minimum number of chunks to create. If sequence is too short, chunking will be disabled.
+
+[KeepChunks]
+Type=boolean
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=3
+Label=Keep Intermediate Chunks
+Default=False
+Description=Keep intermediate chunk files after concatenation (for debugging). Normally these are deleted.
+
+[InputFile]
+Type=Folder
+Category=Paths
+CategoryOrder=2
+CategoryIndex=0
+Label=Input File
+Default=<Info.OutputDirectory0>/<Info.OutputFilename0>
+Description=File path with token support. Token format: <token> Example: <Info.OutputDirectory0> Returns first output directory <Plugin.SceneFile.basename> Returns Scene file base name without extension <Plugin.SceneFile.extension> Returns Scene file extension
+
+[OutputFile]
+Type=Folder
+Category=Paths
+CategoryOrder=2
+CategoryIndex=1
+Label=Output File
+Default=<Info.OutputDirectory0>/<Info.OutputFilename0.basename>_h265.mp4
+Description=File path with token support. Token format: <token> Example: <Info.OutputDirectory0> Returns first output directory <Plugin.SceneFile.basename> Returns Scene file base name without extension <Plugin.SceneFile.extension> Returns Scene file extension
+
+[Priority]
+Type=integer
+Category=Options
+CategoryOrder=0
+CategoryIndex=5
+Label=Job Priority
+Default=50
+Description=Priority for the H.265 encoding job
+
+[Delimiter]
+Type=string
+Category=Options
+CategoryOrder=0
+CategoryIndex=6
+Label=Token Delimiter
+Default=<>
+Description=Token delimiter to use in OutputFile and InputFile. May be one or two symbols long.
