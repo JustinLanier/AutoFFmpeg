@@ -1,0 +1,219 @@
+[State]
+Type=Enum
+Items=Global Enabled;Opt-In;Disabled;Token-Based
+Category=Options
+CategoryOrder=0
+Index=0
+Label=State
+Default=Disabled
+Description=Global Enabled: All matching jobs. Opt-In: Jobs matching filters. Disabled: Off. Token-Based: Jobs with [ffmpeg], [h265], [h264], [prores], or [hap] tokens in filename.
+
+[JobNameFilter]
+Type=string
+Category=Options
+CategoryOrder=0
+CategoryIndex=1
+Label=Job Name Filter (regex)
+Default=.+
+Description=Python regular expression to match job names (used in Global Enabled and Opt-In modes)
+
+[PluginNameFilter]
+Type=string
+Category=Options
+CategoryOrder=0
+CategoryIndex=2
+Label=Plugin Name Filter (regex)
+Default=.+
+Description=Python regular expression to match render plugin names (e.g., VRay, Arnold, Redshift)
+
+[DefaultCodec]
+Type=Enum
+Items=h265;h264;prores;hap
+Category=Options
+CategoryOrder=0
+CategoryIndex=3
+Label=Default Codec
+Default=h265
+Description=Default codec when not specified by filename token. Can be overridden with [h265], [h264], [prores], [hap] in filename.
+
+[InputArgs]
+Type=string
+Category=Options
+CategoryOrder=0
+CategoryIndex=4
+Label=Input Args
+Default=
+Description=Additional FFmpeg input arguments
+
+[FrameRateOverride]
+Type=float
+Category=Options
+CategoryOrder=0
+CategoryIndex=5
+Label=Frame Rate Override (fps)
+Default=0
+Description=Force input framerate (0 = auto-detect). Can be overridden with [24fps], [30fps] etc. in filename.
+
+[Priority]
+Type=integer
+Category=Options
+CategoryOrder=0
+CategoryIndex=6
+Label=Job Priority
+Default=50
+Description=Priority for encoding jobs
+
+[Delimiter]
+Type=string
+Category=Options
+CategoryOrder=0
+CategoryIndex=7
+Label=Token Delimiter
+Default=<>
+Description=Token delimiter for path templates (e.g., <Info.OutputDirectory0>). May be one or two characters.
+
+[EnableGPU]
+Type=boolean
+Category=Codec Settings
+CategoryOrder=1
+CategoryIndex=0
+Label=Enable GPU Acceleration
+Default=True
+Description=Use NVIDIA GPU (NVENC) for H.264/H.265 encoding. Requires compatible NVIDIA graphics card. ProRes and HAP always use CPU.
+
+[CRF]
+Type=integer
+Category=Codec Settings
+CategoryOrder=1
+CategoryIndex=1
+Label=Quality (CRF/CQ)
+Default=23
+Description=Constant quality setting for H.264/H.265 (lower = better quality, larger file). Range: 0-51
+
+[MaxWidth]
+Type=integer
+Category=Codec Settings
+CategoryOrder=1
+CategoryIndex=2
+Label=Maximum Width
+Default=8192
+Description=Maximum output width in pixels. Videos larger will be downscaled while maintaining aspect ratio.
+
+[MaxHeight]
+Type=integer
+Category=Codec Settings
+CategoryOrder=1
+CategoryIndex=3
+Label=Maximum Height
+Default=4320
+Description=Maximum output height in pixels. Videos larger will be downscaled while maintaining aspect ratio.
+
+[OutputArgs]
+Type=string
+Category=Codec Settings
+CategoryOrder=1
+CategoryIndex=4
+Label=Custom Output Args
+Default=
+Description=Additional FFmpeg output arguments to append to codec settings
+
+[ProResProfile]
+Type=Enum
+Items=proxy;lt;422;422hq;4444;4444xq
+Category=Codec Settings
+CategoryOrder=1
+CategoryIndex=5
+Label=ProRes Profile
+Default=422hq
+Description=Apple ProRes profile. Can be overridden with [proreslt], [prores422], [prores4444] etc. in filename.
+
+[EnableAudioSearch]
+Type=boolean
+Category=Audio
+CategoryOrder=2
+CategoryIndex=0
+Label=Enable Audio Search
+Default=False
+Description=Automatically search for audio files to mux with video. Can be enabled with [audio] token in filename.
+
+[AudioCodec]
+Type=Enum
+Items=aac;pcm;copy
+Category=Audio
+CategoryOrder=2
+CategoryIndex=1
+Label=Audio Codec
+Default=aac
+Description=Audio codec for encoding. AAC for MP4, PCM for MOV. Copy preserves original audio.
+
+[AudioBitrate]
+Type=integer
+Category=Audio
+CategoryOrder=2
+CategoryIndex=2
+Label=Audio Bitrate (kbps)
+Default=192
+Description=Audio bitrate in kilobits per second (for AAC encoding)
+
+[EnableChunking]
+Type=boolean
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=0
+Label=Enable Parallel Encoding (Jobs)
+Default=False
+Description=Split encoding across multiple Deadline jobs for parallel processing. Creates separate jobs for each chunk plus a concat job.
+
+[UseTaskBasedChunking]
+Type=boolean
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=1
+Label=Use Task-Based Chunking
+Default=False
+Description=Use single job with multiple tasks instead of separate jobs. Better for monitoring but requires FFmpeg plugin task support.
+
+[ChunkSize]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=2
+Label=Chunk Size (Frames)
+Default=150
+Description=Number of frames per chunk. Smaller chunks = more parallelism but more overhead. Recommended: 100-200 frames.
+
+[MinChunks]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=3
+Label=Minimum Chunks
+Default=2
+Description=Minimum number of chunks to create. If sequence is too short, chunking will be disabled.
+
+[KeepChunks]
+Type=boolean
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=4
+Label=Keep Intermediate Chunks
+Default=False
+Description=Keep intermediate chunk files after concatenation (for debugging)
+
+[InputFile]
+Type=Folder
+Category=Paths
+CategoryOrder=4
+CategoryIndex=0
+Label=Input File
+Default=<Info.OutputDirectory0>/<Info.OutputFilename0>
+Description=Input file path with token support. Tokens: <Info.OutputDirectory0>, <Plugin.SceneFile.basename>, <Plugin.SceneFile.extension>
+
+[OutputFile]
+Type=Folder
+Category=Paths
+CategoryOrder=4
+CategoryIndex=1
+Label=Output File
+Default=<Info.OutputDirectory0>/<Info.OutputFilename0.basename>.mp4
+Description=Output file path with token support. Extension will be updated based on codec (mp4 for H.264/H.265, mov for ProRes/HAP)
