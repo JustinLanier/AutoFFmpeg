@@ -584,12 +584,20 @@ class AutoFFmpeg(DeadlineEventListener):
         del self.OnJobFinishedCallback
 
     def OnJobFinished(self, job):
-        self.LogInfo('AutoFFmpeg: OnJobFinished triggered for job: {}'.format(job.JobName))
+        try:
+            self.LogInfo('AutoFFmpeg: OnJobFinished triggered for job: {}'.format(job.JobName))
 
-        # Get state and check if we should process
-        state = self.GetConfigEntryWithDefault('State', 'Disabled')
+            # Get state and check if we should process
+            state = self.GetConfigEntryWithDefault('State', 'Disabled')
+            self.LogInfo('AutoFFmpeg: Current state: {}'.format(state))
 
-        if state == 'Disabled':
+            if state == 'Disabled':
+                self.LogInfo('AutoFFmpeg: Plugin is disabled, skipping')
+                return
+        except Exception as e:
+            self.LogWarning('AutoFFmpeg: Error in initial setup: {}'.format(str(e)))
+            import traceback
+            self.LogWarning(traceback.format_exc())
             return
 
         # Get input/output file patterns
@@ -612,9 +620,11 @@ class AutoFFmpeg(DeadlineEventListener):
         # Check for token-based triggering
         filename_tokens = None
         if state == 'Token-Based':
+            self.LogInfo('AutoFFmpeg: Checking for tokens in filename: {}'.format(inputFileName))
             filename_tokens = parseFilenameTokens(inputFileName)
             if not filename_tokens:
                 # Also check job name for tokens
+                self.LogInfo('AutoFFmpeg: Checking for tokens in job name: {}'.format(job.JobName))
                 filename_tokens = parseFilenameTokens(job.JobName)
 
             if not filename_tokens:
@@ -774,6 +784,7 @@ class AutoFFmpeg(DeadlineEventListener):
         use_task_chunking = self.GetConfigEntryWithDefault('UseTaskBasedChunking', False, bool)
         chunk_size = self.GetConfigEntryWithDefault('ChunkSize', 150, int)
         min_chunks = self.GetConfigEntryWithDefault('MinChunks', 2, int)
+        keep_chunks = self.GetConfigEntryWithDefault('KeepChunks', False, bool)
 
         if use_task_chunking:
             chunks = calculateChunks(job.JobFramesList, chunk_size, min_chunks)
@@ -789,14 +800,14 @@ class AutoFFmpeg(DeadlineEventListener):
                     inputArgs=input_args,
                     chunks=chunks,
                     priority=priority,
-                    audioFile=audio_file
+                    audioFile=audio_file,
+                    keepChunks=keep_chunks
                 )
                 self.LogInfo('Submitted task-based encoding job: {}'.format(outputFileName))
                 return
 
         # Standard single job or chunk-based jobs
         enable_chunking = self.GetConfigEntryWithDefault('EnableChunking', False, bool)
-        keep_chunks = self.GetConfigEntryWithDefault('KeepChunks', False, bool)
 
         if enable_chunking:
             chunks = calculateChunks(job.JobFramesList, chunk_size, min_chunks)
@@ -1092,8 +1103,10 @@ def createConcatJob(job, chunkFiles, finalOutputFile, priority, keepChunks=False
         for chunkFile in chunkFiles:
             f.write(f"file '{chunkFile}'\n")
 
+    # Build full input args with -i included since FFmpeg plugin may not handle txt files
+    concatListFileFormatted = concatListFile.replace('\\', '/')
+    concatInputArgs = f'-f concat -safe 0 -i "{concatListFileFormatted}"'
     concatArgs = '-c copy -movflags +faststart'
-    concatInputArgs = f'-f concat -safe 0 -i {concatListFile}'
 
     # Add audio for concat job
     if audioFile:
@@ -1121,8 +1134,10 @@ def createConcatJob(job, chunkFiles, finalOutputFile, priority, keepChunks=False
         if v:
             jobInfo[k] = v
 
+    # Use first chunk file as InputFile0 so FFmpeg plugin doesn't skip InputArgs0
+    # The actual input comes from InputArgs0 with the concat demuxer
     pluginInfo = {
-        'InputFile0': '',
+        'InputFile0': chunkFiles[0].replace('\\', '/') if chunkFiles else '',
         'InputArgs0': concatInputArgs,
         'ReplacePadding0': False,
         'OutputFile': finalOutputFile.replace('\\', '/'),
@@ -1159,10 +1174,11 @@ def createConcatJob(job, chunkFiles, finalOutputFile, priority, keepChunks=False
 
 
 def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, inputArgs,
-                               chunks, priority, audioFile=None):
+                               chunks, priority, audioFile=None, keepChunks=False):
     """
     Create a single job with multiple tasks for parallel encoding.
     Each task encodes a chunk, and a final task concatenates them.
+    Uses the custom AutoFFmpegTask plugin for task-aware processing.
     """
     pattern = r"(?P<head>.+?)(?P<padding>#+)(?P<tail>\.\w+$)"
     padding = re.search(pattern, inputFileName)
@@ -1189,7 +1205,7 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         'Frames': frameList,
         'ChunkSize': 1,
         'Name': job.JobName + '_Encode',
-        'Plugin': 'FFmpeg',
+        'Plugin': 'AutoFFmpegTask',  # Use custom task-aware plugin
         'OutputDirectory0': outputDirectory.replace('\\', '/'),
         'OutputFilename0': os.path.basename(outputFileName),
         'OnJobComplete': 'delete',
@@ -1205,13 +1221,13 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
     pluginInfo = {
         'InputFile0': inputFileName.replace('\\', '/'),
         'InputArgs0': inputArgs,
-        'ReplacePadding0': False,
         'OutputFile': outputFileName.replace('\\', '/'),
         'OutputArgs': outputArgs,
         'NumChunks': numChunks,
         'OutputDirectory': outputDirectory.replace('\\', '/'),
         'Basename': basename,
         'Container': container,
+        'KeepChunks': str(keepChunks),
     }
 
     # Add chunk information
@@ -1308,7 +1324,10 @@ def sequenceToWildcard(sequence):
 
         search = re.search(pattern, sequence)
         if search:
-            return re.sub(pattern, r"\g<head>*\g<tail>", sequence)
+            result = re.sub(pattern, r"\g<head>*\g<tail>", sequence)
+            # Escape square brackets so [h264] is treated as literal text, not glob pattern
+            result = result.replace('[', '[[]')
+            return result
     return sequence
 
 

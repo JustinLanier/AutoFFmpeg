@@ -1,0 +1,17 @@
+[About]
+Type=label
+Label=About
+Category=About Plugin
+CategoryOrder=-1
+Index=0
+Default=AutoFFmpegTask - Task-aware FFmpeg encoding plugin for parallel chunk processing
+Description=AutoFFmpegTask - Task-aware FFmpeg encoding plugin for parallel chunk processing
+
+[FFmpegExecutable]
+Type=filename
+Label=FFmpeg Executable
+Category=FFmpeg Settings
+CategoryOrder=0
+CategoryIndex=0
+Default=
+Description=Path to FFmpeg executable. Leave blank to auto-detect from PATH or common locations.
