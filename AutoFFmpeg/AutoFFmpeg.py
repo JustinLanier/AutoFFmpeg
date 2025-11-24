@@ -646,6 +646,22 @@ class AutoFFmpeg(DeadlineEventListener):
             if not pluginNameFilter or not re.match(pluginNameFilter, job.JobPlugin):
                 return
 
+            # Still parse tokens for codec/fps/audio detection even in filter modes
+            self.LogInfo('Checking for tokens in: {}'.format(inputFileName))
+            filename_tokens = parseFilenameTokens(inputFileName)
+            if not filename_tokens:
+                self.LogInfo('No tokens in input file, checking job name: {}'.format(job.JobName))
+                filename_tokens = parseFilenameTokens(job.JobName)
+
+            if filename_tokens:
+                self.LogInfo('Found tokens - Codec: {}, FPS: {}, Audio: {}'.format(
+                    filename_tokens.get('codec'),
+                    filename_tokens.get('fps'),
+                    filename_tokens.get('audio')
+                ))
+            else:
+                self.LogInfo('No tokens found, will use DefaultCodec')
+
         self.LogInfo('=== INPUT FILE ANALYSIS ===')
         self.LogInfo('Input file pattern: {}'.format(inputFileName))
         self.LogInfo('Output file: {}'.format(outputFileName))
@@ -785,6 +801,7 @@ class AutoFFmpeg(DeadlineEventListener):
         chunk_size = self.GetConfigEntryWithDefault('ChunkSize', 150, int)
         min_chunks = self.GetConfigEntryWithDefault('MinChunks', 2, int)
         keep_chunks = self.GetConfigEntryWithDefault('KeepChunks', False, bool)
+        concurrent_tasks = self.GetConfigEntryWithDefault('ConcurrentTasks', 3, int)
 
         if use_task_chunking:
             chunks = calculateChunks(job.JobFramesList, chunk_size, min_chunks)
@@ -801,7 +818,8 @@ class AutoFFmpeg(DeadlineEventListener):
                     chunks=chunks,
                     priority=priority,
                     audioFile=audio_file,
-                    keepChunks=keep_chunks
+                    keepChunks=keep_chunks,
+                    concurrentTasks=concurrent_tasks
                 )
                 self.LogInfo('Submitted task-based encoding job: {}'.format(outputFileName))
                 return
@@ -1174,7 +1192,7 @@ def createConcatJob(job, chunkFiles, finalOutputFile, priority, keepChunks=False
 
 
 def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, inputArgs,
-                               chunks, priority, audioFile=None, keepChunks=False):
+                               chunks, priority, audioFile=None, keepChunks=False, concurrentTasks=3):
     """
     Create a single job with multiple tasks for parallel encoding.
     Each task encodes a chunk, and a final task concatenates them.
@@ -1210,6 +1228,7 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         'OutputFilename0': os.path.basename(outputFileName),
         'OnJobComplete': 'delete',
         'Priority': priority,
+        'ConcurrentTasks': concurrentTasks,
     }
 
     for k in ['Pool', 'SecondaryPool', 'Whitelist', 'Blacklist']:

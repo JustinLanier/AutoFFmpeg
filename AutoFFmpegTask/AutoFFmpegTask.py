@@ -173,21 +173,28 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
                 self.LogInfo("AutoFFmpegTask: Cleaning up chunk files...")
 
                 for i in range(numChunks):
-                    chunkFile = "{}/{}_chunk{:03d}.{}".format(outputDir, basename, i + 1, container)
+                    chunkFilename = "{}_chunk{:03d}.{}".format(basename, i + 1, container)
+                    chunkFile = os.path.join(outputDir, chunkFilename)
+                    # Normalize path for the current OS
+                    chunkFile = os.path.normpath(chunkFile)
                     try:
                         if os.path.exists(chunkFile):
                             os.remove(chunkFile)
                             self.LogInfo("AutoFFmpegTask: Deleted {}".format(chunkFile))
+                        else:
+                            self.LogWarning("AutoFFmpegTask: Chunk file not found: {}".format(chunkFile))
                     except Exception as e:
                         self.LogWarning("AutoFFmpegTask: Could not delete {}: {}".format(chunkFile, str(e)))
 
                 # Also delete concat list
-                concatListFile = "{}/{}_concat.txt".format(outputDir, basename)
+                concatListFilename = "{}_concat.txt".format(basename)
+                concatListFile = os.path.normpath(os.path.join(outputDir, concatListFilename))
                 try:
                     if os.path.exists(concatListFile):
                         os.remove(concatListFile)
-                except:
-                    pass
+                        self.LogInfo("AutoFFmpegTask: Deleted {}".format(concatListFile))
+                except Exception as e:
+                    self.LogWarning("AutoFFmpegTask: Could not delete concat list: {}".format(str(e)))
 
     def HandleStdoutError(self):
         # FFmpeg outputs to stderr, not stdout

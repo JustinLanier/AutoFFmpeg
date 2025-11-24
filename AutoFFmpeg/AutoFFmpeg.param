@@ -200,6 +200,15 @@ Label=Keep Intermediate Chunks
 Default=False
 Description=Keep intermediate chunk files after concatenation (for debugging)
 
+[ConcurrentTasks]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=5
+Label=Concurrent Tasks
+Default=3
+Description=Number of encoding tasks to run simultaneously on each machine. Higher values use more CPU/GPU but encode faster. Recommended: 2-4 for GPU encoding, 1-2 for CPU.
+
 [InputFile]
 Type=Folder
 Category=Paths
