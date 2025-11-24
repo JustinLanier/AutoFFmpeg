@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(Copy-Item -Recurse -Force \"c:\\Users\\justi\\OneDrive\\Documents\\GitHub\\AutoFFmpeg\\AutoFFmpeg\" \"H:\\DeadlineRepository10\\custom\\events\\AutoFFmpeg\")",
+      "Bash(xcopy:*)",
+      "Bash(cmd /c \"xcopy /E /I /Y \"\"c:\\Users\\justi\\OneDrive\\Documents\\GitHub\\AutoFFmpeg\\AutoFFmpeg\"\" \"\"H:\\DeadlineRepository10\\custom\\events\\AutoFFmpeg\"\"\")",
+      "Bash(cmd /c \"dir \"\"H:\\DeadlineRepository10\\custom\\events\\AutoFFmpeg\"\"\")",
+      "Bash(cmd /c \"if exist \"\"H:\\DeadlineRepository10\\custom\\events\"\" (echo Directory exists) else (echo Directory not found)\")",
+      "Bash(robocopy:*)",
+      "Bash(cmd //c \"robocopy \"\"c:\\Users\\justi\\OneDrive\\Documents\\GitHub\\AutoFFmpeg\\AutoFFmpeg\"\" \"\"H:\\DeadlineRepository10\\custom\\events\\AutoFFmpeg\"\" /MIR\")",
+      "Bash(powershell:*)"
     ],
     "deny": [],
     "ask": []
