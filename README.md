@@ -11,14 +11,65 @@ A Deadline event plugin that automatically encodes rendered image sequences to v
 - **HAP** - GPU-accelerated playback codec (MOV)
 
 ### Intelligent Token System
-Automatically detect encoding settings from filenames:
-- **Codec tokens**: `[h265]`, `[h264]`, `[prores]`, `[hap]`
-- **FPS tokens**: `[24fps]`, `[30fps]`, `[60fps]`
-- **Audio tokens**: `[audio]` - auto-search for matching audio files
-- **ProRes profiles**: `[prores422]`, `[prores4444]`, `[proreslt]`
-- **HAP variants**: `[hapalpha]`, `[hapq]`
+Automatically detect encoding settings from filenames or job names. Tokens are **case-insensitive** and can use brackets `[token]` or underscores `_token_`.
 
-Example: `MyRender_[h264]_[30fps]_#####.exr` will encode to H.264 at 30fps.
+#### Token Reference
+
+**Trigger Tokens** (Token-Based mode only)
+- `[ffmpeg]` or `_ffmpeg_` - Explicitly trigger encoding
+
+**Codec Tokens**
+- `[h265]` or `_h265_` - Encode to H.265/HEVC (MP4)
+- `[h264]` or `_h264_` - Encode to H.264/AVC (MP4)
+- `[prores]` or `_prores` - Encode to Apple ProRes (MOV)
+- `[hap]` or `_hap_` - Encode to HAP (MOV)
+
+**Frame Rate Tokens**
+- `[24fps]`, `[30fps]`, `[60fps]` - Set specific frame rate
+- `_24fps_`, `_30fps_`, `_60fps_` - Underscore format
+- Any number supported: `[23.976fps]`, `[29.97fps]`, `[59.94fps]`
+
+**Audio Tokens**
+- `[audio]` or `_audio_` - Enable audio file search and muxing
+
+**ProRes Profile Tokens** (use with ProRes codec)
+- `[proresproxy]` - ProRes Proxy (smallest)
+- `[proreslt]` - ProRes LT
+- `[prores422]` - ProRes 422 (default)
+- `[prores422hq]` - ProRes 422 HQ
+- `[prores4444]` - ProRes 4444 (alpha support)
+- `[prores4444xq]` - ProRes 4444 XQ (highest quality)
+
+**HAP Variant Tokens** (use with HAP codec)
+- `[hap]` - Standard HAP
+- `[hapq]` - HAP Q (higher quality)
+- `[hapalpha]` - HAP Alpha (with transparency)
+
+#### Token Examples
+
+```
+MyProject_[h264]_[30fps]_#####.exr
+→ H.264 at 30fps
+
+Render_[h265]_[24fps]_[audio]_#####.exr
+→ H.265 at 24fps with audio
+
+ProRes_Export_[prores422hq]_[60fps]_#####.exr
+→ ProRes 422 HQ at 60fps
+
+Playback_[hapalpha]_#####.exr
+→ HAP with alpha channel
+
+Scene01_[ffmpeg]_[h264]_#####.exr
+→ Explicitly trigger H.264 encoding (Token-Based mode)
+```
+
+#### Token Combinations
+- Multiple tokens can be combined in any order
+- Tokens work in both filename and job name
+- Underscore format: `Project_h264_30fps_audio_#####.exr`
+- Bracket format: `Project_[h264]_[30fps]_[audio]_#####.exr`
+- Mixed format: `Project_[h264]_30fps_#####.exr`
 
 ### GPU Acceleration
 - NVIDIA NVENC support for H.264 and H.265 encoding
