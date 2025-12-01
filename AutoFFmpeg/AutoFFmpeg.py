@@ -587,6 +587,17 @@ class AutoFFmpeg(DeadlineEventListener):
         try:
             self.LogInfo('AutoFFmpeg: OnJobFinished triggered for job: {}'.format(job.JobName))
 
+            # Prevent processing our own encoding jobs (avoid infinite loops)
+            job_plugin = job.JobPlugin
+            if job_plugin in ['FFmpeg', 'AutoFFmpegTask']:
+                self.LogInfo('AutoFFmpeg: Skipping encoding job (plugin: {})'.format(job_plugin))
+                return
+
+            # Also check job name for encoding suffix
+            if job.JobName.endswith('_Encode') or job.JobName.endswith('_Concat'):
+                self.LogInfo('AutoFFmpeg: Skipping encoding job (name ends with _Encode or _Concat)')
+                return
+
             # Get state and check if we should process
             state = self.GetConfigEntryWithDefault('State', 'Disabled')
             self.LogInfo('AutoFFmpeg: Current state: {}'.format(state))
