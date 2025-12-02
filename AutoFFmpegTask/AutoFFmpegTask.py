@@ -8,6 +8,7 @@ from Deadline.Scripting import RepositoryUtils
 import os
 import subprocess
 import re
+import time
 import shutil
 
 
@@ -161,40 +162,69 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         numChunks = int(self.GetPluginInfoEntry("NumChunks"))
         currentTask = self.GetStartFrame()
 
+        self.LogInfo("AutoFFmpegTask: PostRenderTasks - Task {}/{} completed".format(currentTask, numChunks))
+
         # If this was the concat task, optionally clean up chunks
         if currentTask >= numChunks:
             keepChunks = self.GetPluginInfoEntryWithDefault("KeepChunks", "False").lower() == "true"
+            self.LogInfo("AutoFFmpegTask: Concat task finished. KeepChunks={}".format(keepChunks))
 
             if not keepChunks:
                 outputDir = self.GetPluginInfoEntry("OutputDirectory")
                 basename = self.GetPluginInfoEntry("Basename")
                 container = self.GetPluginInfoEntry("Container")
 
-                self.LogInfo("AutoFFmpegTask: Cleaning up chunk files...")
+                # Normalize the output directory for the current OS
+                outputDir = os.path.normpath(outputDir)
+
+                self.LogInfo("AutoFFmpegTask: Cleaning up {} chunks from: {}".format(numChunks, outputDir))
+                self.LogInfo("AutoFFmpegTask: Basename: {}, Container: {}".format(basename, container))
+
+                # Small delay to let FFmpeg release file handles
+                time.sleep(2)
 
                 for i in range(numChunks):
                     chunkFilename = "{}_chunk{:03d}.{}".format(basename, i + 1, container)
                     chunkFile = os.path.join(outputDir, chunkFilename)
-                    # Normalize path for the current OS
-                    chunkFile = os.path.normpath(chunkFile)
-                    try:
-                        if os.path.exists(chunkFile):
-                            os.remove(chunkFile)
-                            self.LogInfo("AutoFFmpegTask: Deleted {}".format(chunkFile))
-                        else:
-                            self.LogWarning("AutoFFmpegTask: Chunk file not found: {}".format(chunkFile))
-                    except Exception as e:
-                        self.LogWarning("AutoFFmpegTask: Could not delete {}: {}".format(chunkFile, str(e)))
+
+                    self.LogInfo("AutoFFmpegTask: Attempting to delete: {}".format(chunkFile))
+
+                    # Retry logic for Windows file locking issues
+                    deleted = False
+                    for attempt in range(5):
+                        try:
+                            if os.path.exists(chunkFile):
+                                os.remove(chunkFile)
+                                self.LogInfo("AutoFFmpegTask: Successfully deleted chunk {}".format(i + 1))
+                                deleted = True
+                                break
+                            else:
+                                self.LogWarning("AutoFFmpegTask: Chunk file not found: {}".format(chunkFile))
+                                deleted = True
+                                break
+                        except Exception as e:
+                            if attempt < 4:
+                                self.LogInfo("AutoFFmpegTask: Retry {}/5 - waiting for file lock to release...".format(attempt + 1))
+                                time.sleep(1)
+                            else:
+                                self.LogWarning("AutoFFmpegTask: Could not delete after 5 attempts: {}".format(str(e)))
 
                 # Also delete concat list
                 concatListFilename = "{}_concat.txt".format(basename)
-                concatListFile = os.path.normpath(os.path.join(outputDir, concatListFilename))
-                try:
-                    if os.path.exists(concatListFile):
-                        os.remove(concatListFile)
-                        self.LogInfo("AutoFFmpegTask: Deleted {}".format(concatListFile))
-                except Exception as e:
-                    self.LogWarning("AutoFFmpegTask: Could not delete concat list: {}".format(str(e)))
+                concatListFile = os.path.join(outputDir, concatListFilename)
+                for attempt in range(3):
+                    try:
+                        if os.path.exists(concatListFile):
+                            os.remove(concatListFile)
+                            self.LogInfo("AutoFFmpegTask: Deleted concat list")
+                        break
+                    except Exception as e:
+                        if attempt < 2:
+                            time.sleep(0.5)
+                        else:
+                            self.LogWarning("AutoFFmpegTask: Could not delete concat list: {}".format(str(e)))
+            else:
+                self.LogInfo("AutoFFmpegTask: KeepChunks is True, skipping cleanup")
 
     def HandleStdoutError(self):
         # FFmpeg outputs to stderr, not stdout

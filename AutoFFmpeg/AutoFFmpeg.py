@@ -111,7 +111,7 @@ def parseFilenameTokens(filename):
     trigger_patterns = [
         r'\[ffmpeg\]',
         r'_ffmpeg_',
-        r'\[h265\]', r'\[h264\]', r'\[prores\]', r'\[hap\]',
+        r'\[h265\]', r'\[h264\]', r'\[prores', r'\[hap',  # Partial match for variants
         r'_h265_', r'_h264_', r'_prores', r'_hap_',
     ]
 
@@ -148,8 +148,8 @@ def parseFilenameTokens(filename):
     if re.search(r'\[audio\]|_audio_', filename_lower):
         result['audio'] = True
 
-    # Detect ProRes profile
-    prores_match = re.search(r'prores(proxy|lt|422hq|422|4444xq|4444)', filename_lower)
+    # Detect ProRes profile (order matters - longer matches first!)
+    prores_match = re.search(r'prores(4444xq|4444|422hq|422|proxy|lt)', filename_lower)
     if prores_match:
         result['prores_profile'] = prores_match.group(1)
 
@@ -745,8 +745,10 @@ class AutoFFmpeg(DeadlineEventListener):
         if filename_tokens:
             if filename_tokens.get('prores_profile'):
                 prores_profile = filename_tokens['prores_profile']
+                self.LogInfo('Using ProRes profile from token: {}'.format(prores_profile))
             if filename_tokens.get('hap_variant'):
                 hap_variant = filename_tokens['hap_variant']
+                self.LogInfo('Using HAP variant from token: {}'.format(hap_variant))
 
         optimal_args = buildCodecArgs(
             codec, properties, target_width, target_height,
