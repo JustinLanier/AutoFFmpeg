@@ -11,7 +11,7 @@ import math
 
 try:
     from Deadline.Events import DeadlineEventListener
-    from Deadline.Scripting import ClientUtils, RepositoryUtils
+    from Deadline.Scripting import ClientUtils
 except ImportError:
     DeadlineEventListener = object
 
@@ -624,29 +624,44 @@ class AutoFFmpeg(DeadlineEventListener):
             self.LogWarning('Token Delimiter "%s" should be one or two char long' % delimiter)
             return
 
-        # Path mapping
-        inputFileName = RepositoryUtils.CheckPathMapping(inputFileName, True)
-        outputFileName = RepositoryUtils.CheckPathMapping(outputFileName, True)
+        # Note: We don't apply path mapping here - let each worker handle its own path mapping
+        # Path mapping in the event plugin bakes paths into the job, which causes issues
+        # when different workers have different path mappings
 
         # Check for token-based triggering
         filename_tokens = None
         if state == 'Token-Based':
-            self.LogInfo('AutoFFmpeg: Checking for tokens in filename: {}'.format(inputFileName))
-            filename_tokens = parseFilenameTokens(inputFileName)
-            if not filename_tokens:
-                # Also check job name for tokens
-                self.LogInfo('AutoFFmpeg: Checking for tokens in job name: {}'.format(job.JobName))
-                filename_tokens = parseFilenameTokens(job.JobName)
+            # Check multiple sources for tokens (in priority order)
+            token_sources = [
+                ('Job Name', job.JobName),
+                ('Formatted Input File', inputFileName),
+            ]
+
+            # Also check job output properties if available
+            try:
+                if hasattr(job, 'JobOutputDirectories') and len(job.JobOutputDirectories) > 0:
+                    token_sources.append(('Output Directory', job.JobOutputDirectories[0]))
+                if hasattr(job, 'JobOutputFileNames') and len(job.JobOutputFileNames) > 0:
+                    token_sources.append(('Output Filename', job.JobOutputFileNames[0]))
+            except:
+                pass
+
+            # Search for tokens in all sources
+            for source_name, source_value in token_sources:
+                self.LogInfo('AutoFFmpeg: Checking for tokens in {}: {}'.format(source_name, source_value))
+                filename_tokens = parseFilenameTokens(source_value)
+                if filename_tokens:
+                    self.LogInfo('Token-Based mode: Found tokens in {} - Codec: {}, FPS: {}, Audio: {}'.format(
+                        source_name,
+                        filename_tokens.get('codec'),
+                        filename_tokens.get('fps'),
+                        filename_tokens.get('audio')
+                    ))
+                    break
 
             if not filename_tokens:
-                self.LogInfo('Token-Based mode: No encoding tokens found in filename or job name')
+                self.LogInfo('Token-Based mode: No encoding tokens found in any source')
                 return
-
-            self.LogInfo('Token-Based mode: Found tokens - Codec: {}, FPS: {}, Audio: {}'.format(
-                filename_tokens.get('codec'),
-                filename_tokens.get('fps'),
-                filename_tokens.get('audio')
-            ))
         elif state == 'Global Enabled' or state == 'Opt-In':
             # Traditional filter-based triggering
             jobNameFilter = self.GetConfigEntryWithDefault('JobNameFilter', '')

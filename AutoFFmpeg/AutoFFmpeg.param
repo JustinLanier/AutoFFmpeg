@@ -6,7 +6,7 @@ CategoryOrder=0
 CategoryIndex=0
 Label=State
 Default=Disabled
-Description=Global Enabled: All matching jobs. Opt-In: Jobs matching filters. Disabled: Off. Token-Based: Jobs with [ffmpeg], [h265], [h264], [prores], or [hap] tokens in filename.
+Description=Token-Based (RECOMMENDED): Only processes jobs with codec tokens ([h264], [h265], [prores], [hap]) in job name or output filename. Global Enabled: All jobs matching filters. Opt-In: Jobs matching filters. Disabled: Off.
 
 [JobNameFilter]
 Type=string
@@ -14,8 +14,8 @@ Category=Options
 CategoryOrder=0
 CategoryIndex=1
 Label=Job Name Filter (regex)
-Default=.+
-Description=Python regular expression to match job names (used in Global Enabled and Opt-In modes)
+Default=
+Description=Python regular expression to match job names (used in Global Enabled and Opt-In modes). Leave empty to skip all jobs. Use .+ to match all jobs, or specific patterns like .*Render.* to match jobs with "Render" in the name.
 
 [PluginNameFilter]
 Type=string
@@ -23,8 +23,8 @@ Category=Options
 CategoryOrder=0
 CategoryIndex=2
 Label=Plugin Name Filter (regex)
-Default=.+
-Description=Python regular expression to match render plugin names (e.g., VRay, Arnold, Redshift)
+Default=
+Description=Python regular expression to match render plugin names (e.g., VRay, Arnold, Redshift). Leave empty to skip all jobs. Use .+ to match all plugins, or specific patterns like (VRay|Arnold|AfterEffects) to match specific render engines.
 
 [DefaultCodec]
 Type=Enum
