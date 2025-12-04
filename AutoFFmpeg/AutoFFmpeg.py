@@ -1049,7 +1049,7 @@ def createFFmpegJob(job, inputFileName, outputFileName, outputArgs='', inputArgs
         'OutputDirectory0': os.path.dirname(outputFileName).replace('\\', '/'),
         'OutputFilename0': os.path.basename(outputFileName),
         'OnJobComplete': 'delete',
-        'Priority': priority,
+        'Priority': int(priority),  # Ensure integer
     }
 
     for k in ['Pool', 'SecondaryPool', 'Whitelist', 'Blacklist']:
@@ -1169,7 +1169,7 @@ def createConcatJob(job, chunkFiles, finalOutputFile, priority, keepChunks=False
         'OutputDirectory0': os.path.dirname(finalOutputFile).replace('\\', '/'),
         'OutputFilename0': os.path.basename(finalOutputFile),
         'OnJobComplete': 'delete',
-        'Priority': priority,
+        'Priority': int(priority),  # Ensure integer
     }
 
     if dependsOnJobs:
@@ -1255,8 +1255,8 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         'OutputDirectory0': outputDirectory.replace('\\', '/'),
         'OutputFilename0': os.path.basename(outputFileName),
         'OnJobComplete': 'delete',
-        'Priority': priority,
-        'ConcurrentTasks': concurrentTasks,
+        'Priority': int(priority),  # Ensure integer
+        'ConcurrentTasks': int(concurrentTasks),  # Ensure integer
     }
 
     for k in ['Pool', 'SecondaryPool', 'Whitelist', 'Blacklist']:

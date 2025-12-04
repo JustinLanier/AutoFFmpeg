@@ -9,7 +9,11 @@
       "Bash(cmd /c \"if exist \"\"H:\\DeadlineRepository10\\custom\\events\"\" (echo Directory exists) else (echo Directory not found)\")",
       "Bash(robocopy:*)",
       "Bash(cmd //c \"robocopy \"\"c:\\Users\\justi\\OneDrive\\Documents\\GitHub\\AutoFFmpeg\\AutoFFmpeg\"\" \"\"H:\\DeadlineRepository10\\custom\\events\\AutoFFmpeg\"\" /MIR\")",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(cmd /c \"dir /b H:\\DeadlineRepository10\\custom\\plugins\\AutoFFmpegTask\")",
+      "Bash(cmd /c \"dir /b /s H:\\DeadlineRepository10\\custom\\plugins\\AutoFFmpegTask\")",
+      "Bash(cmd /c \"dir /b c:\\Users\\justi\\OneDrive\\Documents\\GitHub\\AutoFFmpeg\\AutoFFmpegTask\")",
+      "Bash(cmd /c \"dir /b H:\\DeadlineRepository10\\events\\AutoFFmpeg*\")"
     ],
     "deny": [],
     "ask": []
