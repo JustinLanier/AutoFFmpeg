@@ -874,6 +874,13 @@ class AutoFFmpeg(DeadlineEventListener):
         keep_chunks = self.GetConfigEntryWithDefault('KeepChunks', False, bool)
         concurrent_tasks = self.GetConfigEntryWithDefault('ConcurrentTasks', 3, int)
 
+        # Apply codec-specific concurrent task limits
+        prores_max_concurrent = self.GetConfigEntryWithDefault('ProResMaxConcurrentTasks', 1, int)
+        if codec == 'prores' and concurrent_tasks > prores_max_concurrent:
+            self.LogInfo('LIMIT: Capping concurrent tasks from {} to {} for ProRes (based on ProResMaxConcurrentTasks setting)'.format(
+                concurrent_tasks, prores_max_concurrent))
+            concurrent_tasks = prores_max_concurrent
+
         self.LogInfo('=== CHUNKING DECISION ===')
         self.LogInfo('UseTaskBasedChunking: {}'.format(use_task_chunking))
         self.LogInfo('Frame count: {}'.format(len(job.JobFramesList)))

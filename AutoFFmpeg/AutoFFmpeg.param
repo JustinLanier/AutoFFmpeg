@@ -218,6 +218,15 @@ Label=Concurrent Tasks
 Default=3
 Description=Number of encoding tasks to run simultaneously on each machine. Higher values use more CPU/GPU but encode faster. Recommended: 2-4 for GPU encoding, 1-2 for CPU.
 
+[ProResMaxConcurrentTasks]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=6
+Label=ProRes Max Concurrent Tasks (LIMIT)
+Default=1
+Description=CEILING: Maximum concurrent tasks allowed for ProRes encoding. ProRes is CPU-only and very slow - benchmark determined 1 is optimal. This prevents ConcurrentTasks from going higher for ProRes jobs. Set to 1 based on performance testing.
+
 [InputFile]
 Type=Folder
 Category=Paths
