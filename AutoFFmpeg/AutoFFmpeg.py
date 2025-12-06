@@ -874,12 +874,28 @@ class AutoFFmpeg(DeadlineEventListener):
         keep_chunks = self.GetConfigEntryWithDefault('KeepChunks', False, bool)
         concurrent_tasks = self.GetConfigEntryWithDefault('ConcurrentTasks', 3, int)
 
-        # Apply codec-specific concurrent task limits
+        # Apply codec-specific concurrent task limits (performance ceilings from benchmarking)
+        # These limits prevent going higher than the optimal tested values
         prores_max_concurrent = self.GetConfigEntryWithDefault('ProResMaxConcurrentTasks', 1, int)
-        if codec == 'prores' and concurrent_tasks > prores_max_concurrent:
-            self.LogInfo('LIMIT: Capping concurrent tasks from {} to {} for ProRes (based on ProResMaxConcurrentTasks setting)'.format(
-                concurrent_tasks, prores_max_concurrent))
-            concurrent_tasks = prores_max_concurrent
+        h264_max_concurrent = self.GetConfigEntryWithDefault('H264MaxConcurrentTasks', 2 if enable_gpu else 4, int)
+        h265_max_concurrent = self.GetConfigEntryWithDefault('H265MaxConcurrentTasks', 2 if enable_gpu else 4, int)
+        hap_max_concurrent = self.GetConfigEntryWithDefault('HapMaxConcurrentTasks', 4, int)
+
+        max_for_codec = None
+        if codec == 'prores':
+            max_for_codec = prores_max_concurrent
+        elif codec == 'h264':
+            max_for_codec = h264_max_concurrent
+        elif codec == 'h265':
+            max_for_codec = h265_max_concurrent
+        elif codec == 'hap':
+            max_for_codec = hap_max_concurrent
+
+        if max_for_codec and concurrent_tasks > max_for_codec:
+            gpu_mode = ' (GPU)' if enable_gpu and codec in ['h264', 'h265'] else ' (CPU)' if codec in ['h264', 'h265'] else ''
+            self.LogInfo('LIMIT: Capping concurrent tasks from {} to {} for {}{} - no performance improvement beyond this point'.format(
+                concurrent_tasks, max_for_codec, codec.upper(), gpu_mode))
+            concurrent_tasks = max_for_codec
 
         self.LogInfo('=== CHUNKING DECISION ===')
         self.LogInfo('UseTaskBasedChunking: {}'.format(use_task_chunking))

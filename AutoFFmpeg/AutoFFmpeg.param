@@ -225,7 +225,34 @@ CategoryOrder=3
 CategoryIndex=6
 Label=ProRes Max Concurrent Tasks (LIMIT)
 Default=1
-Description=CEILING: Maximum concurrent tasks allowed for ProRes encoding. ProRes is CPU-only and very slow - benchmark determined 1 is optimal. This prevents ConcurrentTasks from going higher for ProRes jobs. Set to 1 based on performance testing.
+Description=CEILING: Maximum concurrent tasks for ProRes. Benchmark determined 1 is optimal - no performance improvement beyond this point. Prevents ConcurrentTasks from going higher.
+
+[H264MaxConcurrentTasks]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=7
+Label=H.264 Max Concurrent Tasks (LIMIT)
+Default=2
+Description=CEILING: Maximum concurrent tasks for H.264. GPU: 2 is optimal. CPU: 4 is optimal (auto-adjusted). No performance improvement beyond these points. Note: CPU encoding can be faster than GPU on high-core-count systems.
+
+[H265MaxConcurrentTasks]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=8
+Label=H.265 Max Concurrent Tasks (LIMIT)
+Default=2
+Description=CEILING: Maximum concurrent tasks for H.265. GPU: 2 is optimal. CPU: 4 is optimal (auto-adjusted). No performance improvement beyond these points.
+
+[HapMaxConcurrentTasks]
+Type=integer
+Category=Parallel Encoding
+CategoryOrder=3
+CategoryIndex=9
+Label=HAP Max Concurrent Tasks (LIMIT)
+Default=4
+Description=CEILING: Maximum concurrent tasks for HAP encoding. Benchmark determined 4 is optimal - HAP is the fastest codec and scales well. No performance improvement beyond this point.
 
 [InputFile]
 Type=Folder
