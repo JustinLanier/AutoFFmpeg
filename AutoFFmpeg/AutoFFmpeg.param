@@ -26,6 +26,15 @@ Label=Plugin Name Filter (regex)
 Default=
 Description=Python regular expression to match render plugin names (e.g., VRay, Arnold, Redshift). Leave empty to skip all jobs. Use .+ to match all plugins, or specific patterns like (VRay|Arnold|AfterEffects) to match specific render engines.
 
+[RequireTokens]
+Type=boolean
+Category=Options
+CategoryOrder=0
+CategoryIndex=3
+Label=Require Tokens (Safety)
+Default=True
+Description=SAFETY: When enabled, only processes jobs with codec tokens ([h264], [h265], [prores], [hap]) in job name or filename, even in Global Enabled mode. This prevents accidentally encoding every job. Highly recommended to keep enabled.
+
 [DefaultCodec]
 Type=Enum
 Items=h265;h264;prores;hap

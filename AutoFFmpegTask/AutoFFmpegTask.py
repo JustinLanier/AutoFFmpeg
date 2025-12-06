@@ -129,12 +129,34 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         # Create concat list file
         concatListFile = "{}/{}_concat.txt".format(outputDir, basename)
 
+        self.LogInfo("AutoFFmpegTask: Building concat list for {} chunks".format(numChunks))
+        missing_chunks = []
         with open(concatListFile, 'w') as f:
             for i in range(numChunks):
                 chunkFile = "{}/{}_chunk{:03d}.{}".format(outputDir, basename, i + 1, container)
+                # Normalize path for current OS
+                chunkFile = os.path.normpath(chunkFile)
+
+                # Check if chunk exists
+                if os.path.isfile(chunkFile):
+                    chunk_size = os.path.getsize(chunkFile)
+                    self.LogInfo("AutoFFmpegTask: Chunk {} exists ({} bytes)".format(i + 1, chunk_size))
+                else:
+                    self.LogWarning("AutoFFmpegTask: Chunk {} MISSING: {}".format(i + 1, chunkFile))
+                    missing_chunks.append(i + 1)
+
+                # Write to concat list (always, even if missing - FFmpeg will error if file not found)
                 f.write("file '{}'\n".format(chunkFile.replace("\\", "/")))
 
+        if missing_chunks:
+            self.LogWarning("AutoFFmpegTask: {} chunks are missing: {}".format(len(missing_chunks), missing_chunks))
+
         self.LogInfo("AutoFFmpegTask: Created concat list: {}".format(concatListFile))
+
+        # Log the contents of the concat list for debugging
+        with open(concatListFile, 'r') as f:
+            concat_contents = f.read()
+            self.LogInfo("AutoFFmpegTask: Concat list contents:\n{}".format(concat_contents))
 
         # Build concat arguments
         args = "-f concat -safe 0 -i \"{}\"".format(concatListFile)
@@ -180,34 +202,47 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
                 self.LogInfo("AutoFFmpegTask: Cleaning up {} chunks from: {}".format(numChunks, outputDir))
                 self.LogInfo("AutoFFmpegTask: Basename: {}, Container: {}".format(basename, container))
 
-                # Small delay to let FFmpeg release file handles
-                time.sleep(2)
+                # Longer initial delay to let FFmpeg fully release file handles
+                time.sleep(5)
 
+                failed_chunks = []
                 for i in range(numChunks):
                     chunkFilename = "{}_chunk{:03d}.{}".format(basename, i + 1, container)
                     chunkFile = os.path.join(outputDir, chunkFilename)
 
                     self.LogInfo("AutoFFmpegTask: Attempting to delete: {}".format(chunkFile))
 
-                    # Retry logic for Windows file locking issues
+                    # More aggressive retry logic with exponential backoff
                     deleted = False
-                    for attempt in range(5):
+                    max_retries = 15
+                    for attempt in range(max_retries):
                         try:
                             if os.path.exists(chunkFile):
                                 os.remove(chunkFile)
-                                self.LogInfo("AutoFFmpegTask: Successfully deleted chunk {}".format(i + 1))
+                                self.LogInfo("AutoFFmpegTask: Successfully deleted chunk {} on attempt {}".format(i + 1, attempt + 1))
                                 deleted = True
                                 break
                             else:
-                                self.LogWarning("AutoFFmpegTask: Chunk file not found: {}".format(chunkFile))
+                                self.LogInfo("AutoFFmpegTask: Chunk file already removed: {}".format(chunkFilename))
                                 deleted = True
                                 break
                         except Exception as e:
-                            if attempt < 4:
-                                self.LogInfo("AutoFFmpegTask: Retry {}/5 - waiting for file lock to release...".format(attempt + 1))
-                                time.sleep(1)
+                            if attempt < max_retries - 1:
+                                # Exponential backoff: 2, 4, 8 seconds, then cap at 10 seconds
+                                delay = min(2 ** (attempt + 1), 10)
+                                self.LogInfo("AutoFFmpegTask: Retry {}/{} - waiting {} seconds for file lock to release...".format(
+                                    attempt + 1, max_retries, delay))
+                                time.sleep(delay)
                             else:
-                                self.LogWarning("AutoFFmpegTask: Could not delete after 5 attempts: {}".format(str(e)))
+                                self.LogWarning("AutoFFmpegTask: Could not delete after {} attempts: {}".format(max_retries, str(e)))
+                                failed_chunks.append(chunkFilename)
+
+                # Report failed deletions
+                if failed_chunks:
+                    self.LogWarning("AutoFFmpegTask: Failed to delete {} chunks: {}".format(
+                        len(failed_chunks), ', '.join(failed_chunks)))
+                else:
+                    self.LogInfo("AutoFFmpegTask: Successfully deleted all {} chunks".format(numChunks))
 
                 # Also delete concat list
                 concatListFilename = "{}_concat.txt".format(basename)

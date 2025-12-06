@@ -162,7 +162,7 @@ def parseFilenameTokens(filename):
     return result
 
 
-def findAudioFile(outputDir, baseName):
+def findAudioFile(outputDir, baseName, logger=None):
     """
     Search for audio file matching the video output.
 
@@ -176,8 +176,14 @@ def findAudioFile(outputDir, baseName):
     """
     audio_extensions = ['.wav', '.mp3', '.aac', '.m4a']
 
-    # Clean up basename (remove codec suffixes if present)
+    # Clean up basename (remove codec suffixes and trailing underscores)
     clean_basename = re.sub(r'_(h265|h264|prores|hap)$', '', baseName)
+    clean_basename = clean_basename.rstrip('_')  # Remove trailing underscores
+
+    if logger:
+        logger('Audio search - Original basename: {}'.format(baseName))
+        logger('Audio search - Cleaned basename: {}'.format(clean_basename))
+        logger('Audio search - Output directory: {}'.format(outputDir))
 
     # Search patterns in priority order
     search_patterns = [
@@ -197,7 +203,11 @@ def findAudioFile(outputDir, baseName):
             continue
         for ext in audio_extensions:
             audio_path = os.path.join(search_dir, name + ext)
+            if logger:
+                logger('Checking: {}'.format(audio_path))
             if os.path.isfile(audio_path):
+                if logger:
+                    logger('Found audio file: {}'.format(audio_path))
                 return audio_path
 
     return None
@@ -598,6 +608,31 @@ class AutoFFmpeg(DeadlineEventListener):
                 self.LogInfo('AutoFFmpeg: Skipping encoding job (name ends with _Encode or _Concat)')
                 return
 
+            # Diagnostic: Log After Effects job properties to find FPS
+            if job_plugin == 'AfterEffects':
+                self.LogInfo('=== AFTER EFFECTS JOB DIAGNOSTIC ===')
+                try:
+                    # Try to get frame rate from plugin info
+                    for key in ['FrameRate', 'CompFrameRate', 'fps', 'FPS', 'FramesPerSecond']:
+                        try:
+                            value = job.GetJobPluginInfoKeyValue(key)
+                            if value:
+                                self.LogInfo('PluginInfo[{}] = {}'.format(key, value))
+                        except:
+                            pass
+
+                    # Try to get frame rate from extra info
+                    for key in ['FrameRate', 'CompFrameRate', 'fps', 'FPS']:
+                        try:
+                            value = job.GetJobExtraInfoKeyValue(key)
+                            if value:
+                                self.LogInfo('ExtraInfo[{}] = {}'.format(key, value))
+                        except:
+                            pass
+                except Exception as e:
+                    self.LogInfo('Could not retrieve diagnostic info: {}'.format(str(e)))
+                self.LogInfo('=== END DIAGNOSTIC ===')
+
             # Get state and check if we should process
             state = self.GetConfigEntryWithDefault('State', 'Disabled')
             self.LogInfo('AutoFFmpeg: Current state: {}'.format(state))
@@ -687,6 +722,12 @@ class AutoFFmpeg(DeadlineEventListener):
                 ))
             else:
                 self.LogInfo('No tokens found, will use DefaultCodec')
+
+                # Safety check: Require tokens even in Global Enabled mode?
+                require_tokens = self.GetConfigEntryWithDefault('RequireTokens', True, bool)
+                if require_tokens:
+                    self.LogInfo('SAFETY: RequireTokens is enabled - skipping job without tokens')
+                    return
 
         self.LogInfo('=== INPUT FILE ANALYSIS ===')
         self.LogInfo('Input file pattern: {}'.format(inputFileName))
@@ -815,11 +856,13 @@ class AutoFFmpeg(DeadlineEventListener):
         if enable_audio:
             output_dir = os.path.dirname(outputFileName)
             output_base_name = os.path.splitext(os.path.basename(outputFileName))[0]
-            audio_file = findAudioFile(output_dir, output_base_name)
+            self.LogInfo('=== AUDIO FILE SEARCH ===')
+            audio_file = findAudioFile(output_dir, output_base_name, logger=self.LogInfo)
             if audio_file:
                 self.LogInfo('Found audio file: {}'.format(audio_file))
             else:
                 self.LogInfo('No audio file found')
+            self.LogInfo('=== END AUDIO SEARCH ===')
 
         # Priority
         priority = self.GetConfigEntryWithDefault('Priority', 50, int)
@@ -831,8 +874,14 @@ class AutoFFmpeg(DeadlineEventListener):
         keep_chunks = self.GetConfigEntryWithDefault('KeepChunks', False, bool)
         concurrent_tasks = self.GetConfigEntryWithDefault('ConcurrentTasks', 3, int)
 
+        self.LogInfo('=== CHUNKING DECISION ===')
+        self.LogInfo('UseTaskBasedChunking: {}'.format(use_task_chunking))
+        self.LogInfo('Frame count: {}'.format(len(job.JobFramesList)))
+        self.LogInfo('Chunk size: {}, Min chunks: {}'.format(chunk_size, min_chunks))
+
         if use_task_chunking:
             chunks = calculateChunks(job.JobFramesList, chunk_size, min_chunks)
+            self.LogInfo('Calculated {} chunks'.format(len(chunks) if chunks else 0))
             if chunks:
                 self.LogInfo('=== TASK-BASED PARALLEL ENCODING ===')
                 self.LogInfo('Total frames: {}, Chunks: {}'.format(len(job.JobFramesList), len(chunks)))
@@ -851,6 +900,10 @@ class AutoFFmpeg(DeadlineEventListener):
                 )
                 self.LogInfo('Submitted task-based encoding job: {}'.format(outputFileName))
                 return
+            else:
+                self.LogInfo('No chunks calculated - using simple encoding')
+        else:
+            self.LogInfo('Task-based chunking is DISABLED - using simple encoding')
 
         # Standard single job or chunk-based jobs
         enable_chunking = self.GetConfigEntryWithDefault('EnableChunking', False, bool)
@@ -1033,10 +1086,8 @@ def createFFmpegJob(job, inputFileName, outputFileName, outputArgs='', inputArgs
         if '-start_number' not in inputArgs:
             inputArgs = inputArgs + ' -start_number {}'.format(job.JobFramesList[0])
 
-    # Add audio input if provided
+    # Add audio encoding args if audio file provided
     if audioFile:
-        inputArgs = inputArgs + f' -i "{audioFile}"'
-        # Add audio encoding
         if outputFileName.endswith('.mp4'):
             outputArgs = outputArgs + ' -c:a aac -b:a 192k'
         elif outputFileName.endswith('.mov'):
@@ -1064,6 +1115,12 @@ def createFFmpegJob(job, inputFileName, outputFileName, outputArgs='', inputArgs
         'OutputFile': outputFileName.replace('\\', '/'),
         'OutputArgs': outputArgs,
     }
+
+    # Add audio as separate input (InputFile1) so it comes AFTER video input
+    if audioFile:
+        pluginInfo['InputFile1'] = audioFile.replace('\\', '/')
+        pluginInfo['InputArgs1'] = ''  # No special args for audio
+        pluginInfo['ReplacePadding1'] = False
 
     jobInfoFile = os.path.join(
         ClientUtils.GetDeadlineTempPath(), "ffmpeg_event_{0}.job".format(job.JobId)
@@ -1247,6 +1304,13 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
     numChunks = len(chunks)
     frameList = ','.join([str(i) for i in range(numChunks + 1)])
 
+    # Set up frame dependencies: concat task (last frame) depends on all chunk tasks
+    # This ensures concat doesn't start until all chunks are encoded
+    frameDependencies = {}
+    concatTaskFrame = numChunks  # The concat task is the last frame
+    for chunkFrame in range(numChunks):
+        frameDependencies[str(concatTaskFrame)] = str(chunkFrame)
+
     jobInfo = {
         'Frames': frameList,
         'ChunkSize': 1,
@@ -1257,6 +1321,7 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         'OnJobComplete': 'delete',
         'Priority': int(priority),  # Ensure integer
         'ConcurrentTasks': int(concurrentTasks),  # Ensure integer
+        'TaskDependencies': ','.join([f'{concatTaskFrame}:{chunkFrame}' for chunkFrame in range(numChunks)]),
     }
 
     for k in ['Pool', 'SecondaryPool', 'Whitelist', 'Blacklist']:
