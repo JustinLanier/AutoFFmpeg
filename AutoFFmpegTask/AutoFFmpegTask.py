@@ -88,10 +88,23 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         else:
             return self.BuildConcatArguments()
 
+    def MapPath(self, path):
+        """Map path for current worker using Deadline's path mapping"""
+        if not path:
+            return path
+
+        # Use Deadline's path mapping to translate paths for this worker
+        mappedPath = RepositoryUtils.CheckPathMapping(path)
+
+        if mappedPath != path:
+            self.LogInfo("AutoFFmpegTask: Path mapped from '{}' to '{}'".format(path, mappedPath))
+
+        return mappedPath
+
     def BuildChunkArguments(self, chunkIndex):
         """Build FFmpeg arguments for encoding a single chunk"""
-        inputFile = self.GetPluginInfoEntry("InputFile0")
-        outputDir = self.GetPluginInfoEntry("OutputDirectory")
+        inputFile = self.MapPath(self.GetPluginInfoEntry("InputFile0"))
+        outputDir = self.MapPath(self.GetPluginInfoEntry("OutputDirectory"))
         basename = self.GetPluginInfoEntry("Basename")
         container = self.GetPluginInfoEntry("Container")
         inputArgs = self.GetPluginInfoEntry("InputArgs0")
@@ -120,10 +133,10 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
 
     def BuildConcatArguments(self):
         """Build FFmpeg arguments for concatenating all chunks"""
-        outputDir = self.GetPluginInfoEntry("OutputDirectory")
+        outputDir = self.MapPath(self.GetPluginInfoEntry("OutputDirectory"))
         basename = self.GetPluginInfoEntry("Basename")
         container = self.GetPluginInfoEntry("Container")
-        finalOutput = self.GetPluginInfoEntry("OutputFile")
+        finalOutput = self.MapPath(self.GetPluginInfoEntry("OutputFile"))
         numChunks = int(self.GetPluginInfoEntry("NumChunks"))
 
         # Create concat list file
@@ -164,6 +177,7 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         # Add audio if specified
         audioFile = self.GetPluginInfoEntryWithDefault("AudioFile", "")
         if audioFile:
+            audioFile = self.MapPath(audioFile)
             args += " -i \"{}\"".format(audioFile)
             if container == "mp4":
                 args += " -c:a aac -b:a 192k"
