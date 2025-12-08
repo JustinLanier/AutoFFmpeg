@@ -1302,9 +1302,11 @@ def createConcatJob(job, chunkFiles, finalOutputFile, priority, keepChunks=False
 def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, inputArgs,
                                chunks, priority, audioFile=None, keepChunks=False, concurrentTasks=3):
     """
-    Create a single job with multiple tasks for parallel encoding.
-    Each task encodes a chunk, and a final task concatenates them.
-    Uses the custom AutoFFmpegTask plugin for task-aware processing.
+    Create TWO separate jobs for parallel encoding:
+    1. Encoding Job: Multiple tasks to encode chunks in parallel
+    2. Concat Job: Single task to concatenate chunks (depends on encoding job)
+
+    This ensures concat doesn't start until all chunks are FULLY written to disk.
     """
     pattern = r"(?P<head>.+?)(?P<padding>#+)(?P<tail>\.\w+$)"
     padding = re.search(pattern, inputFileName)
@@ -1322,37 +1324,33 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
     basename = os.path.splitext(os.path.basename(outputFileName))[0]
     container = os.path.splitext(outputFileName)[1].lstrip('.')
 
-    # Build frame list for tasks: each chunk is a task, plus one concat task
-    # Task frames: 0, 1, 2, ..., N-1 for chunks, N for concat
     numChunks = len(chunks)
-    frameList = ','.join([str(i) for i in range(numChunks + 1)])
 
-    # Set up frame dependencies: concat task (last frame) depends on all chunk tasks
-    # This ensures concat doesn't start until all chunks are encoded
-    # Format: "frame:dependency" - frame X waits for frame Y to complete
-    concatTaskFrame = numChunks  # The concat task is the last frame
-    taskDeps = ','.join([f'{concatTaskFrame}:{chunkFrame}' for chunkFrame in range(numChunks)])
+    # ==================================================
+    # JOB 1: Encoding Job (chunk tasks only, NO concat)
+    # ==================================================
+    # Build frame list for chunk tasks: 0, 1, 2, ..., N-1
+    chunkFrameList = ','.join([str(i) for i in range(numChunks)])
 
-    jobInfo = {
-        'Frames': frameList,
+    encodingJobInfo = {
+        'Frames': chunkFrameList,
         'ChunkSize': 1,
-        'Name': job.JobName + '_Encode',
-        'Plugin': 'AutoFFmpegTask',  # Use custom task-aware plugin
+        'Name': job.JobName + '_Encode_Chunks',
+        'Plugin': 'AutoFFmpegTask',
         'OutputDirectory0': outputDirectory.replace('\\', '/'),
         'OutputFilename0': os.path.basename(outputFileName),
-        'OnJobComplete': 'delete',
-        'Priority': int(priority),  # Ensure integer
-        'ConcurrentTasks': int(concurrentTasks),  # Ensure integer
-        'FrameDependencies': taskDeps,  # Use FrameDependencies for frame-based dependencies
+        'OnJobComplete': 'Nothing',  # Don't delete - concat job needs it
+        'Priority': int(priority),
+        'ConcurrentTasks': int(concurrentTasks),
     }
 
     for k in ['Pool', 'SecondaryPool', 'Whitelist', 'Blacklist']:
         v = job.GetJobInfoKeyValue(k)
         if v:
-            jobInfo[k] = v
+            encodingJobInfo[k] = v
 
-    # Store chunk info in plugin info for task-aware processing
-    pluginInfo = {
+    # Store chunk info in plugin info for encoding job
+    encodingPluginInfo = {
         'InputFile0': inputFileName.replace('\\', '/'),
         'InputArgs0': inputArgs,
         'OutputFile': outputFileName.replace('\\', '/'),
@@ -1361,29 +1359,25 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         'OutputDirectory': outputDirectory.replace('\\', '/'),
         'Basename': basename,
         'Container': container,
-        'KeepChunks': str(keepChunks),
+        'KeepChunks': 'True',  # Must keep chunks for concat job
+        'IsEncodingJob': 'True',  # Flag to indicate this is encoding-only (no concat)
     }
 
     # Add chunk information
     for idx, (startFrame, endFrame) in enumerate(chunks):
-        pluginInfo[f'ChunkStart{idx}'] = startFrame
-        pluginInfo[f'ChunkEnd{idx}'] = endFrame
-        pluginInfo[f'ChunkFrames{idx}'] = endFrame - startFrame + 1
+        encodingPluginInfo[f'ChunkStart{idx}'] = startFrame
+        encodingPluginInfo[f'ChunkEnd{idx}'] = endFrame
+        encodingPluginInfo[f'ChunkFrames{idx}'] = endFrame - startFrame + 1
 
-    if audioFile:
-        pluginInfo['AudioFile'] = audioFile.replace('\\', '/')
+    # Submit encoding job
+    tempPath = ClientUtils.GetDeadlineTempPath()
+    if not os.path.exists(tempPath):
+        os.makedirs(tempPath)
 
-    jobInfoFile = os.path.join(
-        ClientUtils.GetDeadlineTempPath(), f"ffmpeg_tasks_{job.JobId}.job"
-    )
-    pluginInfoFile = os.path.join(
-        ClientUtils.GetDeadlineTempPath(), f"ffmpeg_tasks_plugin_{job.JobId}.job"
-    )
+    encodingJobInfoFile = os.path.join(tempPath, f"ffmpeg_encode_{job.JobId}.job")
+    encodingPluginInfoFile = os.path.join(tempPath, f"ffmpeg_encode_plugin_{job.JobId}.job")
 
-    if not os.path.exists(ClientUtils.GetDeadlineTempPath()):
-        os.makedirs(ClientUtils.GetDeadlineTempPath())
-
-    for p, i in ((jobInfoFile, jobInfo), (pluginInfoFile, pluginInfo)):
+    for p, i in ((encodingJobInfoFile, encodingJobInfo), (encodingPluginInfoFile, encodingPluginInfo)):
         with open(p, 'w') as f:
             for k, v in i.items():
                 f.write(f'{k}={v}\n')
@@ -1394,12 +1388,64 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
     else:
         deadlineCommand = os.path.join(deadlineBin, "deadlinecommand")
 
-    jobId = commandLineSubmit(deadlineCommand, pluginInfoFile, jobInfoFile)
+    encodingJobId = commandLineSubmit(deadlineCommand, encodingPluginInfoFile, encodingJobInfoFile)
 
-    os.remove(jobInfoFile)
-    os.remove(pluginInfoFile)
+    os.remove(encodingJobInfoFile)
+    os.remove(encodingPluginInfoFile)
 
-    return jobId
+    # ==================================================
+    # JOB 2: Concat Job (depends on encoding job)
+    # ==================================================
+    concatJobInfo = {
+        'Frames': '0',  # Single frame for concat task
+        'ChunkSize': 1,
+        'Name': job.JobName + '_Encode_Concat',
+        'Plugin': 'AutoFFmpegTask',
+        'OutputDirectory0': outputDirectory.replace('\\', '/'),
+        'OutputFilename0': os.path.basename(outputFileName),
+        'OnJobComplete': 'delete',
+        'Priority': int(priority),
+        'ConcurrentTasks': 1,  # Only one concat task
+        'JobDependencies': encodingJobId,  # Wait for encoding job to complete
+    }
+
+    for k in ['Pool', 'SecondaryPool', 'Whitelist', 'Blacklist']:
+        v = job.GetJobInfoKeyValue(k)
+        if v:
+            concatJobInfo[k] = v
+
+    # Plugin info for concat job
+    concatPluginInfo = {
+        'InputFile0': inputFileName.replace('\\', '/'),
+        'InputArgs0': inputArgs,
+        'OutputFile': outputFileName.replace('\\', '/'),
+        'OutputArgs': outputArgs,
+        'NumChunks': numChunks,
+        'OutputDirectory': outputDirectory.replace('\\', '/'),
+        'Basename': basename,
+        'Container': container,
+        'KeepChunks': str(keepChunks),
+        'IsConcatJob': 'True',  # Flag to indicate this is concat-only
+    }
+
+    if audioFile:
+        concatPluginInfo['AudioFile'] = audioFile.replace('\\', '/')
+
+    # Submit concat job
+    concatJobInfoFile = os.path.join(tempPath, f"ffmpeg_concat_{job.JobId}.job")
+    concatPluginInfoFile = os.path.join(tempPath, f"ffmpeg_concat_plugin_{job.JobId}.job")
+
+    for p, i in ((concatJobInfoFile, concatJobInfo), (concatPluginInfoFile, concatPluginInfo)):
+        with open(p, 'w') as f:
+            for k, v in i.items():
+                f.write(f'{k}={v}\n')
+
+    concatJobId = commandLineSubmit(deadlineCommand, concatPluginInfoFile, concatJobInfoFile)
+
+    os.remove(concatJobInfoFile)
+    os.remove(concatPluginInfoFile)
+
+    return concatJobId  # Return concat job ID as the final job
 
 
 # Utility functions

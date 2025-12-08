@@ -70,23 +70,46 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
     def PreRenderTasks(self):
         self.LogInfo("AutoFFmpegTask: Starting task {}".format(self.GetCurrentTaskId()))
 
-        # Get task info
-        numChunks = int(self.GetPluginInfoEntry("NumChunks"))
-        currentTask = self.GetStartFrame()  # Frame number = task number
+        # Check if this is an encoding-only or concat-only job
+        isEncodingJob = self.GetPluginInfoEntryWithDefault("IsEncodingJob", "False") == "True"
+        isConcatJob = self.GetPluginInfoEntryWithDefault("IsConcatJob", "False") == "True"
 
-        if currentTask < numChunks:
-            self.LogInfo("AutoFFmpegTask: Encoding chunk {} of {}".format(currentTask + 1, numChunks))
+        if isEncodingJob:
+            numChunks = int(self.GetPluginInfoEntry("NumChunks"))
+            currentTask = self.GetStartFrame()
+            self.LogInfo("AutoFFmpegTask: Encoding chunk {} of {} (encoding job)".format(currentTask + 1, numChunks))
+        elif isConcatJob:
+            numChunks = int(self.GetPluginInfoEntry("NumChunks"))
+            self.LogInfo("AutoFFmpegTask: Concatenating {} chunks (concat job)".format(numChunks))
         else:
-            self.LogInfo("AutoFFmpegTask: Concatenating {} chunks".format(numChunks))
+            # Legacy: single job with both encoding and concat
+            numChunks = int(self.GetPluginInfoEntry("NumChunks"))
+            currentTask = self.GetStartFrame()
+            if currentTask < numChunks:
+                self.LogInfo("AutoFFmpegTask: Encoding chunk {} of {}".format(currentTask + 1, numChunks))
+            else:
+                self.LogInfo("AutoFFmpegTask: Concatenating {} chunks".format(numChunks))
 
     def RenderArgument(self):
-        numChunks = int(self.GetPluginInfoEntry("NumChunks"))
-        currentTask = self.GetStartFrame()
+        # Check if this is an encoding-only or concat-only job
+        isEncodingJob = self.GetPluginInfoEntryWithDefault("IsEncodingJob", "False") == "True"
+        isConcatJob = self.GetPluginInfoEntryWithDefault("IsConcatJob", "False") == "True"
 
-        if currentTask < numChunks:
+        if isEncodingJob:
+            # Encoding job: always encode chunks
+            currentTask = self.GetStartFrame()
             return self.BuildChunkArguments(currentTask)
-        else:
+        elif isConcatJob:
+            # Concat job: always concatenate
             return self.BuildConcatArguments()
+        else:
+            # Legacy: single job with both encoding and concat
+            numChunks = int(self.GetPluginInfoEntry("NumChunks"))
+            currentTask = self.GetStartFrame()
+            if currentTask < numChunks:
+                return self.BuildChunkArguments(currentTask)
+            else:
+                return self.BuildConcatArguments()
 
     def MapPath(self, path):
         """Map path for current worker using Deadline's path mapping"""
