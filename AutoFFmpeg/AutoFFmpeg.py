@@ -82,7 +82,7 @@ def parseFilenameTokens(filename):
 
     Supported tokens (case-insensitive):
     - Trigger: [ffmpeg], _ffmpeg_
-    - Codec: [h265], [h264], [prores], [hap]
+    - Codec: [h265]/[h.265], [h264]/[h.264], [prores], [hap]
     - FPS: [24fps], [30fps], [60fps], etc.
     - Audio: [audio]
     - ProRes profile: [prores422], [prores4444], [proreslt], etc.
@@ -111,8 +111,8 @@ def parseFilenameTokens(filename):
     trigger_patterns = [
         r'\[ffmpeg\]',
         r'_ffmpeg_',
-        r'\[h265\]', r'\[h264\]', r'\[prores', r'\[hap',  # Partial match for variants
-        r'_h265_', r'_h264_', r'_prores', r'_hap_',
+        r'\[h\.?265\]', r'\[h\.?264\]', r'\[prores', r'\[hap',  # Partial match for variants (dot optional)
+        r'_h\.?265_', r'_h\.?264_', r'_prores', r'_hap_',
     ]
 
     for pattern in trigger_patterns:
@@ -125,8 +125,8 @@ def parseFilenameTokens(filename):
 
     # Detect codec
     codec_patterns = [
-        (r'\[h265\]|_h265_', 'h265'),
-        (r'\[h264\]|_h264_', 'h264'),
+        (r'\[h\.?265\]|_h\.?265_', 'h265'),  # Support both [h265] and [h.265]
+        (r'\[h\.?264\]|_h\.?264_', 'h264'),  # Support both [h264] and [h.264]
         (r'\[prores', 'prores'),  # Partial match for prores variants
         (r'_prores', 'prores'),
         (r'\[hap', 'hap'),  # Partial match for hap variants
