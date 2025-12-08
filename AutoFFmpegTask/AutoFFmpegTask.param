@@ -15,3 +15,30 @@ CategoryOrder=0
 CategoryIndex=0
 Default=
 Description=Path to FFmpeg executable. Leave blank to auto-detect from PATH or common locations.
+
+[EnableLocalRendering]
+Type=boolean
+Label=Enable Local Rendering
+Category=Local Rendering
+CategoryOrder=1
+CategoryIndex=0
+Default=False
+Description=Copy input files to worker's local disk before encoding, then copy output back. Improves performance for workers over VPN/slow networks. Requires sufficient local disk space.
+
+[LocalRenderingPath]
+Type=folder
+Label=Local Rendering Path
+Category=Local Rendering
+CategoryOrder=1
+CategoryIndex=1
+Default=C:/DeadlineTemp/LocalRendering
+Description=Local directory on worker machine where files will be copied. Must have sufficient disk space for input sequences and output files. Directory will be created if it doesn't exist.
+
+[CleanupLocalFiles]
+Type=boolean
+Label=Cleanup Local Files
+Category=Local Rendering
+CategoryOrder=1
+CategoryIndex=2
+Default=True
+Description=Delete local copies of files after encoding completes. Recommended to keep enabled to save disk space.

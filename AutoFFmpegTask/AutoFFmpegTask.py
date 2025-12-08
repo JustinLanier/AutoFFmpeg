@@ -74,13 +74,62 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         isEncodingJob = self.GetPluginInfoEntryWithDefault("IsEncodingJob", "False") == "True"
         isConcatJob = self.GetPluginInfoEntryWithDefault("IsConcatJob", "False") == "True"
 
+        # Check if local rendering is enabled
+        enableLocalRendering = self.GetConfigEntryWithDefault("EnableLocalRendering", False, bool)
+
+        if enableLocalRendering:
+            self.LogInfo("AutoFFmpegTask: Local rendering ENABLED")
+            localPath = self.GetConfigEntryWithDefault("LocalRenderingPath", "C:/DeadlineTemp/LocalRendering")
+            jobId = self.GetJob().JobId
+            taskId = self.GetCurrentTaskId()
+
+            # Create unique local directory for this task
+            self.localRenderDir = os.path.join(localPath, f"Job_{jobId}_Task_{taskId}")
+            self.localInputDir = os.path.join(self.localRenderDir, "input")
+            self.localOutputDir = os.path.join(self.localRenderDir, "output")
+
+            os.makedirs(self.localInputDir, exist_ok=True)
+            os.makedirs(self.localOutputDir, exist_ok=True)
+
+            self.LogInfo("AutoFFmpegTask: Local render directory: {}".format(self.localRenderDir))
+        else:
+            self.localRenderDir = None
+
         if isEncodingJob:
             numChunks = int(self.GetPluginInfoEntry("NumChunks"))
             currentTask = self.GetStartFrame()
             self.LogInfo("AutoFFmpegTask: Encoding chunk {} of {} (encoding job)".format(currentTask + 1, numChunks))
+
+            # Copy input files for this chunk to local directory
+            if enableLocalRendering:
+                inputFile = self.MapPath(self.GetPluginInfoEntry("InputFile0"))
+                startFrame = int(self.GetPluginInfoEntry(f"ChunkStart{currentTask}"))
+                endFrame = int(self.GetPluginInfoEntry(f"ChunkEnd{currentTask}"))
+
+                self.LogInfo("AutoFFmpegTask: Copying chunk {} frames ({}-{}) to local storage".format(
+                    currentTask + 1, startFrame, endFrame))
+                self.CopyFilesToLocal(inputFile, self.localInputDir, startFrame, endFrame)
+
         elif isConcatJob:
             numChunks = int(self.GetPluginInfoEntry("NumChunks"))
             self.LogInfo("AutoFFmpegTask: Concatenating {} chunks (concat job)".format(numChunks))
+
+            # Copy chunk files to local directory for concat
+            if enableLocalRendering:
+                outputDir = self.MapPath(self.GetPluginInfoEntry("OutputDirectory"))
+                basename = self.GetPluginInfoEntry("Basename")
+                container = self.GetPluginInfoEntry("Container")
+
+                self.LogInfo("AutoFFmpegTask: Copying {} chunk files to local storage".format(numChunks))
+                for i in range(numChunks):
+                    chunkFile = os.path.join(outputDir, f"{basename}_chunk{i+1:03d}.{container}")
+                    self.CopyFileToLocal(chunkFile, self.localInputDir)
+
+                # Copy audio file if present
+                audioFile = self.GetPluginInfoEntryWithDefault("AudioFile", "")
+                if audioFile:
+                    audioFile = self.MapPath(audioFile)
+                    self.CopyFileToLocal(audioFile, self.localInputDir)
         else:
             # Legacy: single job with both encoding and concat
             numChunks = int(self.GetPluginInfoEntry("NumChunks"))
@@ -124,6 +173,86 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
 
         return mappedPath
 
+    def CopyFilesToLocal(self, sourcePattern, destDir, startFrame=None, endFrame=None):
+        """Copy files matching pattern to local directory for local rendering"""
+        import glob
+        import shutil
+
+        os.makedirs(destDir, exist_ok=True)
+
+        # Convert sequence pattern to glob pattern
+        globPattern = sourcePattern.replace('%05d', '*').replace('%04d', '*').replace('%03d', '*')
+
+        self.LogInfo("AutoFFmpegTask: Copying files from '{}' to '{}'".format(globPattern, destDir))
+
+        files = glob.glob(globPattern)
+        if not files:
+            self.LogWarning("AutoFFmpegTask: No files found matching pattern '{}'".format(globPattern))
+            return []
+
+        # Filter by frame range if specified
+        if startFrame is not None and endFrame is not None:
+            import re
+            framePattern = re.compile(r'(\d+)\.\w+$')
+            filteredFiles = []
+            for f in files:
+                match = framePattern.search(f)
+                if match:
+                    frameNum = int(match.group(1))
+                    if startFrame <= frameNum <= endFrame:
+                        filteredFiles.append(f)
+            files = filteredFiles
+
+        copiedFiles = []
+        for srcFile in files:
+            destFile = os.path.join(destDir, os.path.basename(srcFile))
+            try:
+                shutil.copy2(srcFile, destFile)
+                copiedFiles.append(destFile)
+            except Exception as e:
+                self.LogWarning("AutoFFmpegTask: Failed to copy '{}': {}".format(srcFile, e))
+
+        self.LogInfo("AutoFFmpegTask: Copied {} files to local directory".format(len(copiedFiles)))
+        return copiedFiles
+
+    def CopyFileToLocal(self, sourceFile, destDir):
+        """Copy a single file to local directory"""
+        import shutil
+
+        os.makedirs(destDir, exist_ok=True)
+
+        destFile = os.path.join(destDir, os.path.basename(sourceFile))
+        try:
+            shutil.copy2(sourceFile, destFile)
+            self.LogInfo("AutoFFmpegTask: Copied '{}' to '{}'".format(sourceFile, destFile))
+            return destFile
+        except Exception as e:
+            self.LogWarning("AutoFFmpegTask: Failed to copy '{}': {}".format(sourceFile, e))
+            return None
+
+    def CopyFileFromLocal(self, localFile, networkPath):
+        """Copy output file from local directory back to network"""
+        import shutil
+
+        try:
+            shutil.copy2(localFile, networkPath)
+            self.LogInfo("AutoFFmpegTask: Copied output '{}' to '{}'".format(localFile, networkPath))
+            return True
+        except Exception as e:
+            self.LogWarning("AutoFFmpegTask: Failed to copy output '{}': {}".format(localFile, e))
+            return False
+
+    def CleanupLocalFiles(self, localDir):
+        """Remove local rendering directory and all files"""
+        import shutil
+
+        try:
+            if os.path.exists(localDir):
+                shutil.rmtree(localDir)
+                self.LogInfo("AutoFFmpegTask: Cleaned up local directory '{}'".format(localDir))
+        except Exception as e:
+            self.LogWarning("AutoFFmpegTask: Failed to cleanup local directory '{}': {}".format(localDir, e))
+
     def BuildChunkArguments(self, chunkIndex):
         """Build FFmpeg arguments for encoding a single chunk"""
         inputFile = self.MapPath(self.GetPluginInfoEntry("InputFile0"))
@@ -136,6 +265,13 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         # Get chunk-specific parameters
         startFrame = int(self.GetPluginInfoEntry("ChunkStart{}".format(chunkIndex)))
         numFrames = int(self.GetPluginInfoEntry("ChunkFrames{}".format(chunkIndex)))
+
+        # Use local paths if local rendering is enabled
+        if hasattr(self, 'localRenderDir') and self.localRenderDir:
+            # Update input file to use local directory
+            inputFile = os.path.join(self.localInputDir, os.path.basename(inputFile))
+            # Update output to use local directory
+            outputDir = self.localOutputDir
 
         # Build chunk output filename
         chunkFile = "{}/{}_chunk{:03d}.{}".format(outputDir, basename, chunkIndex + 1, container)
@@ -161,6 +297,12 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         container = self.GetPluginInfoEntry("Container")
         finalOutput = self.MapPath(self.GetPluginInfoEntry("OutputFile"))
         numChunks = int(self.GetPluginInfoEntry("NumChunks"))
+
+        # Use local paths if local rendering is enabled
+        if hasattr(self, 'localRenderDir') and self.localRenderDir:
+            # Chunks are in local input dir, output goes to local output dir
+            outputDir = self.localInputDir  # Chunks are here
+            finalOutput = os.path.join(self.localOutputDir, os.path.basename(finalOutput))
 
         # Create concat list file
         concatListFile = "{}/{}_concat.txt".format(outputDir, basename)
@@ -201,6 +343,9 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         audioFile = self.GetPluginInfoEntryWithDefault("AudioFile", "")
         if audioFile:
             audioFile = self.MapPath(audioFile)
+            # Use local path if local rendering is enabled
+            if hasattr(self, 'localRenderDir') and self.localRenderDir:
+                audioFile = os.path.join(self.localInputDir, os.path.basename(audioFile))
             args += " -i \"{}\"".format(audioFile)
             if container == "mp4":
                 args += " -c:a aac -b:a 192k"
@@ -222,6 +367,46 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         currentTask = self.GetStartFrame()
 
         self.LogInfo("AutoFFmpegTask: PostRenderTasks - Task {}/{} completed".format(currentTask, numChunks))
+
+        # Handle local rendering: copy output back to network and cleanup
+        if hasattr(self, 'localRenderDir') and self.localRenderDir:
+            enableLocalRendering = self.GetConfigEntryWithDefault("EnableLocalRendering", False, bool)
+            cleanupLocal = self.GetConfigEntryWithDefault("CleanupLocalFiles", True, bool)
+
+            if enableLocalRendering:
+                self.LogInfo("AutoFFmpegTask: Copying output files back to network")
+
+                # Determine what to copy back based on job type
+                isEncodingJob = self.GetPluginInfoEntryWithDefault("IsEncodingJob", "False") == "True"
+                isConcatJob = self.GetPluginInfoEntryWithDefault("IsConcatJob", "False") == "True"
+
+                if isEncodingJob:
+                    # Copy chunk file back
+                    basename = self.GetPluginInfoEntry("Basename")
+                    container = self.GetPluginInfoEntry("Container")
+                    chunkFilename = f"{basename}_chunk{currentTask+1:03d}.{container}"
+                    localChunkFile = os.path.join(self.localOutputDir, chunkFilename)
+                    networkOutputDir = self.MapPath(self.GetPluginInfoEntry("OutputDirectory"))
+                    networkChunkFile = os.path.join(networkOutputDir, chunkFilename)
+
+                    if os.path.exists(localChunkFile):
+                        self.CopyFileFromLocal(localChunkFile, networkChunkFile)
+                    else:
+                        self.LogWarning("AutoFFmpegTask: Local chunk file not found: {}".format(localChunkFile))
+
+                elif isConcatJob or currentTask >= numChunks:
+                    # Copy final output file back
+                    finalOutput = self.MapPath(self.GetPluginInfoEntry("OutputFile"))
+                    localFinalOutput = os.path.join(self.localOutputDir, os.path.basename(finalOutput))
+
+                    if os.path.exists(localFinalOutput):
+                        self.CopyFileFromLocal(localFinalOutput, finalOutput)
+                    else:
+                        self.LogWarning("AutoFFmpegTask: Local output file not found: {}".format(localFinalOutput))
+
+                # Cleanup local files if enabled
+                if cleanupLocal:
+                    self.CleanupLocalFiles(self.localRenderDir)
 
         # If this was the concat task, optionally clean up chunks
         if currentTask >= numChunks:
