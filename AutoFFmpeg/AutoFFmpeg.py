@@ -1405,6 +1405,7 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         deadlineCommand = os.path.join(deadlineBin, "deadlinecommand")
 
     encodingJobId = commandLineSubmit(deadlineCommand, encodingPluginInfoFile, encodingJobInfoFile)
+    print(f"[AutoFFmpeg] Submitted encoding job: {encodingJobId}")
 
     os.remove(encodingJobInfoFile)
     os.remove(encodingPluginInfoFile)
@@ -1456,7 +1457,12 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
             for k, v in i.items():
                 f.write(f'{k}={v}\n')
 
+    # Debug: Log the job dependency setting
+    print(f"[AutoFFmpeg] Concat job info - JobDependencies={concatJobInfo.get('JobDependencies', 'NOT SET')}")
+
     concatJobId = commandLineSubmit(deadlineCommand, concatPluginInfoFile, concatJobInfoFile)
+    print(f"[AutoFFmpeg] Submitted concat job: {concatJobId}")
+    print(f"[AutoFFmpeg] Concat job depends on encoding job: {encodingJobId}")
 
     os.remove(concatJobInfoFile)
     os.remove(concatPluginInfoFile)
