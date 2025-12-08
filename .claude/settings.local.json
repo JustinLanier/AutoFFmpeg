@@ -21,7 +21,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(cmd /c \"robocopy \"\"c:\\Users\\justi\\OneDrive\\Documents\\GitHub\\AutoFFmpeg\\AutoFFmpegTask\"\" \"\"H:\\DeadlineRepository10\\custom\\plugins\\AutoFFmpegTask\"\" /MIR\")"
     ],
     "deny": [],
     "ask": []
