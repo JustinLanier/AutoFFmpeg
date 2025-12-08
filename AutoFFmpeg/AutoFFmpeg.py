@@ -1329,10 +1329,9 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
 
     # Set up frame dependencies: concat task (last frame) depends on all chunk tasks
     # This ensures concat doesn't start until all chunks are encoded
-    frameDependencies = {}
+    # Format: "frame:dependency" - frame X waits for frame Y to complete
     concatTaskFrame = numChunks  # The concat task is the last frame
-    for chunkFrame in range(numChunks):
-        frameDependencies[str(concatTaskFrame)] = str(chunkFrame)
+    taskDeps = ','.join([f'{concatTaskFrame}:{chunkFrame}' for chunkFrame in range(numChunks)])
 
     jobInfo = {
         'Frames': frameList,
@@ -1344,7 +1343,7 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         'OnJobComplete': 'delete',
         'Priority': int(priority),  # Ensure integer
         'ConcurrentTasks': int(concurrentTasks),  # Ensure integer
-        'TaskDependencies': ','.join([f'{concatTaskFrame}:{chunkFrame}' for chunkFrame in range(numChunks)]),
+        'FrameDependencies': taskDeps,  # Use FrameDependencies for frame-based dependencies
     }
 
     for k in ['Pool', 'SecondaryPool', 'Whitelist', 'Blacklist']:
