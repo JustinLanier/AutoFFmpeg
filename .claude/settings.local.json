@@ -13,7 +13,15 @@
       "Bash(cmd /c \"dir /b H:\\DeadlineRepository10\\custom\\plugins\\AutoFFmpegTask\")",
       "Bash(cmd /c \"dir /b /s H:\\DeadlineRepository10\\custom\\plugins\\AutoFFmpegTask\")",
       "Bash(cmd /c \"dir /b c:\\Users\\justi\\OneDrive\\Documents\\GitHub\\AutoFFmpeg\\AutoFFmpegTask\")",
-      "Bash(cmd /c \"dir /b H:\\DeadlineRepository10\\events\\AutoFFmpeg*\")"
+      "Bash(cmd /c \"dir /b H:\\DeadlineRepository10\\events\\AutoFFmpeg*\")",
+      "Bash(python:*)",
+      "Bash(cmd /c \"robocopy \"\"c:\\Users\\justi\\OneDrive\\Documents\\GitHub\\AutoFFmpeg\\AutoFFmpeg\"\" \"\"H:\\DeadlineRepository10\\custom\\events\\AutoFFmpeg\"\" /MIR\")",
+      "Bash(dir:*)",
+      "Bash(cmd /c \"dir /b H:\\DeadlineRepository10\\custom\\events\\AutoFFmpeg\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []
