@@ -75,7 +75,7 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         isConcatJob = self.GetPluginInfoEntryWithDefault("IsConcatJob", "False") == "True"
 
         # Check if local rendering is enabled
-        enableLocalRendering = self.GetConfigEntryWithDefault("EnableLocalRendering", False, bool)
+        enableLocalRendering = self.GetConfigEntryWithDefault("EnableLocalRendering", "False").lower() == "true"
 
         if enableLocalRendering:
             self.LogInfo("AutoFFmpegTask: Local rendering ENABLED")
@@ -370,8 +370,8 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
 
         # Handle local rendering: copy output back to network and cleanup
         if hasattr(self, 'localRenderDir') and self.localRenderDir:
-            enableLocalRendering = self.GetConfigEntryWithDefault("EnableLocalRendering", False, bool)
-            cleanupLocal = self.GetConfigEntryWithDefault("CleanupLocalFiles", True, bool)
+            enableLocalRendering = self.GetConfigEntryWithDefault("EnableLocalRendering", "False").lower() == "true"
+            cleanupLocal = self.GetConfigEntryWithDefault("CleanupLocalFiles", "True").lower() == "true"
 
             if enableLocalRendering:
                 self.LogInfo("AutoFFmpegTask: Copying output files back to network")
