@@ -246,7 +246,7 @@ def detectEXRFrameRateFromSequence(inputFile):
 
         for offset in test_offsets:
             test_frame = current_frame + offset
-            test_filename = f"{base_pattern}{test_frame:05d}.exr"
+            test_filename = "{}{:05d}.exr".format(base_pattern, test_frame)
             test_filepath = os.path.join(directory, test_filename)
 
             if os.path.exists(test_filepath):
@@ -1243,11 +1243,11 @@ def createConcatJob(job, chunkFiles, finalOutputFile, priority, keepChunks=False
 
     with open(concatListFile, 'w') as f:
         for chunkFile in chunkFiles:
-            f.write(f"file '{chunkFile}'\n")
+            f.write("file '{}'\n".format(chunkFile))
 
     # Build full input args with -i included since FFmpeg plugin may not handle txt files
     concatListFileFormatted = concatListFile.replace('\\', '/')
-    concatInputArgs = f'-f concat -safe 0 -i "{concatListFileFormatted}"'
+    concatInputArgs = '-f concat -safe 0 -i "{}"'.format(concatListFileFormatted)
     concatArgs = '-c copy -movflags +faststart'
 
     # Add audio for concat job
@@ -1287,10 +1287,10 @@ def createConcatJob(job, chunkFiles, finalOutputFile, priority, keepChunks=False
     }
 
     jobInfoFile = os.path.join(
-        ClientUtils.GetDeadlineTempPath(), f"ffmpeg_concat_{job.JobId}.job"
+        ClientUtils.GetDeadlineTempPath(), "ffmpeg_concat_{}.job".format(job.JobId)
     )
     pluginInfoFile = os.path.join(
-        ClientUtils.GetDeadlineTempPath(), f"ffmpeg_concat_plugin_{job.JobId}.job"
+        ClientUtils.GetDeadlineTempPath(), "ffmpeg_concat_plugin_{}.job".format(job.JobId)
     )
 
     if not os.path.exists(ClientUtils.GetDeadlineTempPath()):
@@ -1390,13 +1390,13 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
     if not os.path.exists(tempPath):
         os.makedirs(tempPath)
 
-    encodingJobInfoFile = os.path.join(tempPath, f"ffmpeg_encode_{job.JobId}.job")
-    encodingPluginInfoFile = os.path.join(tempPath, f"ffmpeg_encode_plugin_{job.JobId}.job")
+    encodingJobInfoFile = os.path.join(tempPath, "ffmpeg_encode_{}.job".format(job.JobId))
+    encodingPluginInfoFile = os.path.join(tempPath, "ffmpeg_encode_plugin_{}.job".format(job.JobId))
 
     for p, i in ((encodingJobInfoFile, encodingJobInfo), (encodingPluginInfoFile, encodingPluginInfo)):
         with open(p, 'w') as f:
             for k, v in i.items():
-                f.write(f'{k}={v}\n')
+                f.write('{}={}\n'.format(k, v))
 
     deadlineBin = ClientUtils.GetBinDirectory()
     if os.name == 'nt':
@@ -1405,7 +1405,7 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         deadlineCommand = os.path.join(deadlineBin, "deadlinecommand")
 
     encodingJobId = commandLineSubmit(deadlineCommand, encodingPluginInfoFile, encodingJobInfoFile)
-    print(f"[AutoFFmpeg] Submitted encoding job: {encodingJobId}")
+    print("[AutoFFmpeg] Submitted encoding job: {}".format(encodingJobId))
 
     os.remove(encodingJobInfoFile)
     os.remove(encodingPluginInfoFile)
@@ -1449,20 +1449,20 @@ def createTaskBasedEncodingJob(job, inputFileName, outputFileName, outputArgs, i
         concatPluginInfo['AudioFile'] = audioFile.replace('\\', '/')
 
     # Submit concat job
-    concatJobInfoFile = os.path.join(tempPath, f"ffmpeg_concat_{job.JobId}.job")
-    concatPluginInfoFile = os.path.join(tempPath, f"ffmpeg_concat_plugin_{job.JobId}.job")
+    concatJobInfoFile = os.path.join(tempPath, "ffmpeg_concat_{}.job".format(job.JobId))
+    concatPluginInfoFile = os.path.join(tempPath, "ffmpeg_concat_plugin_{}.job".format(job.JobId))
 
     for p, i in ((concatJobInfoFile, concatJobInfo), (concatPluginInfoFile, concatPluginInfo)):
         with open(p, 'w') as f:
             for k, v in i.items():
-                f.write(f'{k}={v}\n')
+                f.write('{}={}\n'.format(k, v))
 
     # Debug: Log the job dependency setting
-    print(f"[AutoFFmpeg] Concat job info - JobDependencies={concatJobInfo.get('JobDependencies', 'NOT SET')}")
+    print("[AutoFFmpeg] Concat job info - JobDependencies={}".format(concatJobInfo.get('JobDependencies', 'NOT SET')))
 
     concatJobId = commandLineSubmit(deadlineCommand, concatPluginInfoFile, concatJobInfoFile)
-    print(f"[AutoFFmpeg] Submitted concat job: {concatJobId}")
-    print(f"[AutoFFmpeg] Concat job depends on encoding job: {encodingJobId}")
+    print("[AutoFFmpeg] Submitted concat job: {}".format(concatJobId))
+    print("[AutoFFmpeg] Concat job depends on encoding job: {}".format(encodingJobId))
 
     os.remove(concatJobInfoFile)
     os.remove(concatPluginInfoFile)

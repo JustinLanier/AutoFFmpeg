@@ -84,7 +84,7 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
             taskId = self.GetCurrentTaskId()
 
             # Create unique local directory for this task
-            self.localRenderDir = os.path.join(localPath, f"Job_{jobId}_Task_{taskId}")
+            self.localRenderDir = os.path.join(localPath, "Job_{}_Task_{}".format(jobId, taskId))
             self.localInputDir = os.path.join(self.localRenderDir, "input")
             self.localOutputDir = os.path.join(self.localRenderDir, "output")
 
@@ -103,8 +103,8 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
             # Copy input files for this chunk to local directory
             if enableLocalRendering:
                 inputFile = self.MapPath(self.GetPluginInfoEntry("InputFile0"))
-                startFrame = int(self.GetPluginInfoEntry(f"ChunkStart{currentTask}"))
-                endFrame = int(self.GetPluginInfoEntry(f"ChunkEnd{currentTask}"))
+                startFrame = int(self.GetPluginInfoEntry("ChunkStart{}".format(currentTask)))
+                endFrame = int(self.GetPluginInfoEntry("ChunkEnd{}".format(currentTask)))
 
                 self.LogInfo("AutoFFmpegTask: Copying chunk {} frames ({}-{}) to local storage".format(
                     currentTask + 1, startFrame, endFrame))
@@ -122,7 +122,7 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
 
                 self.LogInfo("AutoFFmpegTask: Copying {} chunk files to local storage".format(numChunks))
                 for i in range(numChunks):
-                    chunkFile = os.path.join(outputDir, f"{basename}_chunk{i+1:03d}.{container}")
+                    chunkFile = os.path.join(outputDir, "{}_chunk{:03d}.{}".format(basename, i+1, container))
                     self.CopyFileToLocal(chunkFile, self.localInputDir)
 
                 # Copy audio file if present
@@ -384,7 +384,7 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
                     # Copy chunk file back
                     basename = self.GetPluginInfoEntry("Basename")
                     container = self.GetPluginInfoEntry("Container")
-                    chunkFilename = f"{basename}_chunk{currentTask+1:03d}.{container}"
+                    chunkFilename = "{}_chunk{:03d}.{}".format(basename, currentTask+1, container)
                     localChunkFile = os.path.join(self.localOutputDir, chunkFilename)
                     networkOutputDir = self.MapPath(self.GetPluginInfoEntry("OutputDirectory"))
                     networkChunkFile = os.path.join(networkOutputDir, chunkFilename)
