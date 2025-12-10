@@ -22,7 +22,7 @@ def CleanupDeadlinePlugin(plugin):
 
 class AutoFFmpegTaskPlugin(DeadlinePlugin):
     def __init__(self):
-        super().__init__()
+        super(AutoFFmpegTaskPlugin, self).__init__()
         self.InitializeProcessCallback += self.InitializeProcess
         self.RenderExecutableCallback += self.RenderExecutable
         self.RenderArgumentCallback += self.RenderArgument
@@ -59,10 +59,18 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
             if os.path.isfile(path):
                 return path
 
-        # Try to find in PATH
-        ffmpegExe = shutil.which("ffmpeg")
-        if ffmpegExe:
-            return ffmpegExe
+        # Try to find in PATH (Python 2 compatible)
+        try:
+            # Python 3
+            ffmpegExe = shutil.which("ffmpeg")
+            if ffmpegExe:
+                return ffmpegExe
+        except AttributeError:
+            # Python 2 - manually search PATH
+            for pathDir in os.environ.get("PATH", "").split(os.pathsep):
+                ffmpegPath = os.path.join(pathDir, "ffmpeg.exe" if os.name == 'nt' else "ffmpeg")
+                if os.path.isfile(ffmpegPath):
+                    return ffmpegPath
 
         self.FailRender("Could not find FFmpeg executable")
         return ""
@@ -88,8 +96,11 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
             self.localInputDir = os.path.join(self.localRenderDir, "input")
             self.localOutputDir = os.path.join(self.localRenderDir, "output")
 
-            os.makedirs(self.localInputDir, exist_ok=True)
-            os.makedirs(self.localOutputDir, exist_ok=True)
+            # Python 2 compatible directory creation
+            if not os.path.exists(self.localInputDir):
+                os.makedirs(self.localInputDir)
+            if not os.path.exists(self.localOutputDir):
+                os.makedirs(self.localOutputDir)
 
             self.LogInfo("AutoFFmpegTask: Local render directory: {}".format(self.localRenderDir))
         else:
@@ -178,7 +189,9 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         import glob
         import shutil
 
-        os.makedirs(destDir, exist_ok=True)
+        # Python 2 compatible directory creation
+        if not os.path.exists(destDir):
+            os.makedirs(destDir)
 
         # Convert sequence pattern to glob pattern
         globPattern = sourcePattern.replace('%05d', '*').replace('%04d', '*').replace('%03d', '*')
@@ -219,7 +232,9 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         """Copy a single file to local directory"""
         import shutil
 
-        os.makedirs(destDir, exist_ok=True)
+        # Python 2 compatible directory creation
+        if not os.path.exists(destDir):
+            os.makedirs(destDir)
 
         destFile = os.path.join(destDir, os.path.basename(sourceFile))
         try:
