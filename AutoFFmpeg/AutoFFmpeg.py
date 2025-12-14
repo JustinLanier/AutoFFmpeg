@@ -679,6 +679,33 @@ class AutoFFmpeg(DeadlineEventListener):
         # Path mapping in the event plugin bakes paths into the job, which causes issues
         # when different workers have different path mappings
 
+        # Check for AutoFFmpeg settings in ExtraInfo (from AE submitter UI)
+        extrainfo_settings = None
+        try:
+            autoFFmpegEnable = job.GetJobExtraInfoKeyValue('AutoFFmpegEnable')
+            if autoFFmpegEnable and autoFFmpegEnable.lower() == 'true':
+                self.LogInfo('AutoFFmpeg: Found AutoFFmpeg settings in ExtraInfo (from submitter UI)')
+                extrainfo_settings = {
+                    'codec': job.GetJobExtraInfoKeyValue('AutoFFmpegCodec'),
+                    'fps': job.GetJobExtraInfoKeyValue('AutoFFmpegFPS'),
+                    'audio': job.GetJobExtraInfoKeyValue('AutoFFmpegAudio'),
+                    'quality': job.GetJobExtraInfoKeyValue('AutoFFmpegQuality'),
+                    'gpu': job.GetJobExtraInfoKeyValue('AutoFFmpegGPU'),
+                    'chunks': job.GetJobExtraInfoKeyValue('AutoFFmpegChunks'),
+                    'concurrent': job.GetJobExtraInfoKeyValue('AutoFFmpegConcurrent'),
+                }
+                self.LogInfo('ExtraInfo settings - Codec: {}, FPS: {}, Audio: {}, Quality: {}, GPU: {}, Chunks: {}, Concurrent: {}'.format(
+                    extrainfo_settings.get('codec'),
+                    extrainfo_settings.get('fps'),
+                    extrainfo_settings.get('audio'),
+                    extrainfo_settings.get('quality'),
+                    extrainfo_settings.get('gpu'),
+                    extrainfo_settings.get('chunks'),
+                    extrainfo_settings.get('concurrent')
+                ))
+        except Exception as e:
+            self.LogInfo('No AutoFFmpeg ExtraInfo found (will use token detection): {}'.format(str(e)))
+
         # Check for token-based triggering
         filename_tokens = None
         if state == 'Token-Based':
@@ -777,11 +804,16 @@ class AutoFFmpeg(DeadlineEventListener):
             self.LogWarning('Could not detect video properties, using defaults')
             detected_frame_rate = None
 
-        # Determine codec (from tokens or config)
-        if filename_tokens and filename_tokens.get('codec'):
+        # Determine codec (priority: ExtraInfo > tokens > config)
+        if extrainfo_settings and extrainfo_settings.get('codec'):
+            codec = extrainfo_settings['codec']
+            self.LogInfo('Using codec from ExtraInfo: {}'.format(codec))
+        elif filename_tokens and filename_tokens.get('codec'):
             codec = filename_tokens['codec']
+            self.LogInfo('Using codec from tokens: {}'.format(codec))
         else:
             codec = self.GetConfigEntryWithDefault('DefaultCodec', 'h265').lower()
+            self.LogInfo('Using default codec: {}'.format(codec))
 
         codec_config = CODEC_CONFIGS.get(codec, CODEC_CONFIGS['h265'])
         self.LogInfo('Using codec: {} ({})'.format(codec_config['name'], codec))
@@ -807,9 +839,18 @@ class AutoFFmpeg(DeadlineEventListener):
         else:
             target_width, target_height = 1920, 1080
 
-        # Build encoding arguments
-        enable_gpu = self.GetConfigEntryWithDefault('EnableGPU', True, bool)
-        crf = self.GetConfigEntryWithDefault('CRF', 23, int)
+        # Build encoding arguments (priority: ExtraInfo > config)
+        if extrainfo_settings and extrainfo_settings.get('gpu'):
+            enable_gpu = extrainfo_settings['gpu'].lower() == 'true'
+            self.LogInfo('Using GPU setting from ExtraInfo: {}'.format(enable_gpu))
+        else:
+            enable_gpu = self.GetConfigEntryWithDefault('EnableGPU', True, bool)
+
+        if extrainfo_settings and extrainfo_settings.get('quality'):
+            crf = int(extrainfo_settings['quality'])
+            self.LogInfo('Using CRF from ExtraInfo: {}'.format(crf))
+        else:
+            crf = self.GetConfigEntryWithDefault('CRF', 23, int)
         prores_profile = self.GetConfigEntryWithDefault('ProResProfile', '422hq')
         hap_variant = None
 
@@ -837,11 +878,15 @@ class AutoFFmpeg(DeadlineEventListener):
         # Handle input arguments
         input_args = self.GetConfigEntryWithDefault('InputArgs', '')
 
-        # Frame rate detection
+        # Frame rate detection (priority: ExtraInfo > tokens > override > detected > predicted)
         frame_rate_override = self.GetConfigEntryWithDefault('FrameRateOverride', 0, float)
 
-        # Token FPS takes priority
-        if filename_tokens and filename_tokens.get('fps'):
+        # ExtraInfo FPS takes highest priority
+        if extrainfo_settings and extrainfo_settings.get('fps'):
+            final_frame_rate = float(extrainfo_settings['fps'])
+            input_args = f'-r {final_frame_rate} {input_args}'.strip()
+            self.LogInfo('Using FPS from ExtraInfo: {} fps'.format(final_frame_rate))
+        elif filename_tokens and filename_tokens.get('fps'):
             final_frame_rate = filename_tokens['fps']
             input_args = f'-r {final_frame_rate} {input_args}'.strip()
             self.LogInfo('Using FPS from filename token: {} fps'.format(final_frame_rate))
@@ -863,10 +908,15 @@ class AutoFFmpeg(DeadlineEventListener):
                 self.LogWarning('Frame rate could not be determined. Please set FrameRateOverride or use [fps] token.')
                 return
 
-        # Audio detection
-        enable_audio = self.GetConfigEntryWithDefault('EnableAudioSearch', False, bool)
-        if filename_tokens and filename_tokens.get('audio'):
+        # Audio detection (priority: ExtraInfo > tokens > config)
+        if extrainfo_settings and extrainfo_settings.get('audio'):
+            enable_audio = extrainfo_settings['audio'].lower() == 'true'
+            self.LogInfo('Using audio setting from ExtraInfo: {}'.format(enable_audio))
+        elif filename_tokens and filename_tokens.get('audio'):
             enable_audio = True
+            self.LogInfo('Using audio setting from tokens: True')
+        else:
+            enable_audio = self.GetConfigEntryWithDefault('EnableAudioSearch', False, bool)
 
         audio_file = None
         if enable_audio:
@@ -886,9 +936,21 @@ class AutoFFmpeg(DeadlineEventListener):
         # Check for task-based chunking
         use_task_chunking = self.GetConfigEntryWithDefault('UseTaskBasedChunking', False, bool)
         chunk_size = self.GetConfigEntryWithDefault('ChunkSize', 150, int)
-        min_chunks = self.GetConfigEntryWithDefault('MinChunks', 2, int)
+
+        # Chunks and concurrent tasks (priority: ExtraInfo > config)
+        if extrainfo_settings and extrainfo_settings.get('chunks'):
+            min_chunks = int(extrainfo_settings['chunks'])
+            self.LogInfo('Using chunks from ExtraInfo: {}'.format(min_chunks))
+        else:
+            min_chunks = self.GetConfigEntryWithDefault('MinChunks', 2, int)
+
         keep_chunks = self.GetConfigEntryWithDefault('KeepChunks', False, bool)
-        concurrent_tasks = self.GetConfigEntryWithDefault('ConcurrentTasks', 3, int)
+
+        if extrainfo_settings and extrainfo_settings.get('concurrent'):
+            concurrent_tasks = int(extrainfo_settings['concurrent'])
+            self.LogInfo('Using concurrent tasks from ExtraInfo: {}'.format(concurrent_tasks))
+        else:
+            concurrent_tasks = self.GetConfigEntryWithDefault('ConcurrentTasks', 3, int)
 
         # Apply codec-specific concurrent task limits (performance ceilings from benchmarking)
         # These limits prevent going higher than the optimal tested values
