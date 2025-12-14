@@ -767,10 +767,13 @@ class AutoFFmpeg(DeadlineEventListener):
                 self.LogInfo('No tokens found, will use DefaultCodec')
 
                 # Safety check: Require tokens even in Global Enabled mode?
+                # But allow jobs with ExtraInfo settings (from AE submitter UI)
                 require_tokens = self.GetConfigEntryWithDefault('RequireTokens', True, bool)
-                if require_tokens:
-                    self.LogInfo('SAFETY: RequireTokens is enabled - skipping job without tokens')
+                if require_tokens and not extrainfo_settings:
+                    self.LogInfo('SAFETY: RequireTokens is enabled - skipping job without tokens or ExtraInfo settings')
                     return
+                elif extrainfo_settings:
+                    self.LogInfo('SAFETY: Job has ExtraInfo settings - bypassing RequireTokens check')
 
         self.LogInfo('=== INPUT FILE ANALYSIS ===')
         self.LogInfo('Input file pattern: {}'.format(inputFileName))
