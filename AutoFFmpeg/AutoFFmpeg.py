@@ -8,12 +8,14 @@ import glob
 import subprocess
 import json
 import math
+import time
 
 try:
     from Deadline.Events import DeadlineEventListener
-    from Deadline.Scripting import ClientUtils
+    from Deadline.Scripting import ClientUtils, RepositoryUtils
 except ImportError:
     DeadlineEventListener = object
+    RepositoryUtils = None
 
 # Token operations for path formatting
 OPS_MAP = {
@@ -779,12 +781,13 @@ class AutoFFmpeg(DeadlineEventListener):
         self.LogInfo('Input file pattern: {}'.format(inputFileName))
         self.LogInfo('Output file: {}'.format(outputFileName))
 
-        if not os.path.isdir(os.path.dirname(inputFileName)):
-            self.LogWarning('No such directory %s' % os.path.dirname(inputFileName))
-            return
+        # Wait for files to become available (handles network share timing issues)
+        # Get retry settings from config (for Tailscale Drive, network shares, etc.)
+        max_retries = self.GetIntegerConfigEntryWithDefault('MaxRetries', 10)
+        initial_delay = self.GetFloatConfigEntryWithDefault('InitialRetryDelay', 2.0)
 
-        if not glob.glob(sequenceToWildcard(inputFileName)):
-            self.LogWarning('No file/sequence %s' % inputFileName)
+        if not self.waitForFilesWithRetry(inputFileName, max_retries=max_retries, initial_delay=initial_delay):
+            self.LogWarning('Files not available after retries - skipping job')
             return
 
         # Get sample file for analysis
@@ -1059,17 +1062,122 @@ class AutoFFmpeg(DeadlineEventListener):
         )
         self.LogInfo('Submitted encoding job: {}'.format(outputFileName))
 
+    def applyPathMapping(self, path):
+        """
+        Apply Deadline path mapping to translate paths between machines.
+
+        This is critical for events running on a different machine than the renderer.
+        For example: H:\ on BOONYMACHINE needs to be mapped to the correct path
+        on DESKTOP-2MO1NBJ (which may not have H:\ drive at all).
+
+        Args:
+            path: Original path from the job
+
+        Returns:
+            Mapped path for the current machine, or original if mapping fails
+        """
+        if not RepositoryUtils:
+            return path
+
+        try:
+            # Get the current machine name (event is running on this machine)
+            import socket
+            current_machine = socket.gethostname()
+
+            # Apply path mapping for this machine
+            # RepositoryUtils.CheckPathMapping(path, slaveName)
+            mapped_path = RepositoryUtils.CheckPathMapping(path)
+
+            if mapped_path and mapped_path != path:
+                self.LogInfo('Path mapping applied: {} -> {}'.format(path, mapped_path))
+                return mapped_path
+            else:
+                self.LogInfo('No path mapping needed for: {}'.format(path))
+                return path
+
+        except Exception as e:
+            self.LogWarning('Failed to apply path mapping: {}. Using original path: {}'.format(str(e), path))
+            return path
+
+    def waitForFilesWithRetry(self, inputFileName, max_retries=5, initial_delay=1.0):
+        """
+        Wait for directory and files to become available with exponential backoff.
+        This handles network share timing issues where files aren't immediately visible.
+
+        Args:
+            inputFileName: The input file pattern to check for (unmapped path from job)
+            max_retries: Maximum number of retry attempts (default: 5)
+            initial_delay: Initial delay in seconds (default: 1.0)
+
+        Returns:
+            True if files are available, False if max retries exceeded
+        """
+        # Apply path mapping to translate paths for this machine
+        # (e.g., H:\ on BOONYMACHINE -> mapped path on DESKTOP-2MO1NBJ)
+        mapped_inputFileName = self.applyPathMapping(inputFileName)
+        directory = os.path.dirname(mapped_inputFileName)
+        delay = initial_delay
+
+        for attempt in range(max_retries):
+            # Check if directory exists (using mapped path)
+            if not os.path.isdir(directory):
+                if attempt == 0:
+                    self.LogWarning('Directory not immediately available: {} (will retry)'.format(directory))
+                else:
+                    self.LogInfo('Retry {}/{}: Directory still not available, waiting {:.1f}s...'.format(
+                        attempt + 1, max_retries, delay))
+
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    self.LogWarning('Max retries ({}) exceeded - directory never appeared: {}'.format(
+                        max_retries, directory))
+                    return False
+
+            # Directory exists, check for files (using mapped path)
+            wildcard = sequenceToWildcard(mapped_inputFileName)
+            files = glob.glob(wildcard)
+
+            if not files:
+                if attempt == 0:
+                    self.LogWarning('Files not immediately available: {} (will retry)'.format(mapped_inputFileName))
+                else:
+                    self.LogInfo('Retry {}/{}: Files still not available, waiting {:.1f}s...'.format(
+                        attempt + 1, max_retries, delay))
+
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    self.LogWarning('Max retries ({}) exceeded - files never appeared: {}'.format(
+                        max_retries, mapped_inputFileName))
+                    return False
+
+            # Success!
+            if attempt > 0:
+                self.LogInfo('Files became available after {} retries ({} files found)'.format(
+                    attempt, len(files)))
+            return True
+
+        return False
+
     def getSampleFile(self, inputFileName):
         """Get a sample file from sequence for analysis."""
         try:
-            if isSequence(inputFileName):
-                wildcard = sequenceToWildcard(inputFileName)
+            # Apply path mapping to find files on this machine
+            mapped_inputFileName = self.applyPathMapping(inputFileName)
+
+            if isSequence(mapped_inputFileName):
+                wildcard = sequenceToWildcard(mapped_inputFileName)
                 files = glob.glob(wildcard)
                 if files:
                     return sorted(files)[0]
             else:
-                if os.path.exists(inputFileName):
-                    return inputFileName
+                if os.path.exists(mapped_inputFileName):
+                    return mapped_inputFileName
             return None
         except Exception:
             return None

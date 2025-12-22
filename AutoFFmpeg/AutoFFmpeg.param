@@ -81,6 +81,24 @@ Label=Token Delimiter
 Default=<>
 Description=Token delimiter for path templates (e.g., <Info.OutputDirectory0>). May be one or two characters.
 
+[MaxRetries]
+Type=integer
+Category=Options
+CategoryOrder=0
+CategoryIndex=8
+Label=Max File Check Retries
+Default=10
+Description=Maximum retry attempts when waiting for rendered files to become visible (for Tailscale Drive, network shares, etc.). Each retry uses exponential backoff. Default 10 retries = up to ~2 minutes total.
+
+[InitialRetryDelay]
+Type=float
+Category=Options
+CategoryOrder=0
+CategoryIndex=9
+Label=Initial Retry Delay (seconds)
+Default=2.0
+Description=Initial delay before first retry when files aren't immediately available. Uses exponential backoff (2s → 4s → 8s → 16s → 32s → 64s). Increase for slower network filesystems like Tailscale Drive.
+
 [EnableGPU]
 Type=boolean
 Category=Codec Settings
