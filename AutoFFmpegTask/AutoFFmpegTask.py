@@ -42,12 +42,29 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         self.PopupHandling = False
 
     def RenderExecutable(self):
-        # Find FFmpeg executable
-        ffmpegExe = self.GetConfigEntry("FFmpegExecutable")
-        if ffmpegExe and os.path.isfile(ffmpegExe):
-            return ffmpegExe
+        # Priority 1: Check environment variable (per-worker configuration)
+        envFFmpeg = os.environ.get("FFMPEG_PATH")
+        if envFFmpeg:
+            self.LogInfo("AutoFFmpegTask: Checking FFMPEG_PATH environment variable: {}".format(envFFmpeg))
+            # Apply path mapping for remote workers
+            mappedFFmpeg = self.MapPath(envFFmpeg)
+            if os.path.isfile(mappedFFmpeg):
+                self.LogInfo("AutoFFmpegTask: Using FFmpeg from FFMPEG_PATH: {}".format(mappedFFmpeg))
+                return mappedFFmpeg
+            else:
+                self.LogWarning("AutoFFmpegTask: FFMPEG_PATH is set but file not found (after mapping): {}".format(mappedFFmpeg))
 
-        # Try common paths
+        # Priority 2: Check plugin configuration
+        ffmpegExe = self.GetConfigEntry("FFmpegExecutable")
+        if ffmpegExe:
+            # Apply path mapping for remote workers
+            mappedExe = self.MapPath(ffmpegExe)
+            if os.path.isfile(mappedExe):
+                self.LogInfo("AutoFFmpegTask: Using FFmpeg from plugin config: {}".format(mappedExe))
+                return mappedExe
+
+        # Priority 3: Try common paths (also apply path mapping)
+        self.LogInfo("AutoFFmpegTask: Checking common FFmpeg installation paths")
         commonPaths = [
             r"C:\ffmpeg\bin\ffmpeg.exe",
             r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
@@ -56,23 +73,28 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
         ]
 
         for path in commonPaths:
-            if os.path.isfile(path):
-                return path
+            mappedPath = self.MapPath(path)
+            if os.path.isfile(mappedPath):
+                self.LogInfo("AutoFFmpegTask: Using FFmpeg from common path: {}".format(mappedPath))
+                return mappedPath
 
-        # Try to find in PATH (Python 2 compatible)
+        # Priority 4: Try to find in system PATH (Python 2 compatible)
+        self.LogInfo("AutoFFmpegTask: Searching for FFmpeg in system PATH")
         try:
             # Python 3
             ffmpegExe = shutil.which("ffmpeg")
             if ffmpegExe:
+                self.LogInfo("AutoFFmpegTask: Using FFmpeg from system PATH: {}".format(ffmpegExe))
                 return ffmpegExe
         except AttributeError:
             # Python 2 - manually search PATH
             for pathDir in os.environ.get("PATH", "").split(os.pathsep):
                 ffmpegPath = os.path.join(pathDir, "ffmpeg.exe" if os.name == 'nt' else "ffmpeg")
                 if os.path.isfile(ffmpegPath):
+                    self.LogInfo("AutoFFmpegTask: Using FFmpeg from system PATH: {}".format(ffmpegPath))
                     return ffmpegPath
 
-        self.FailRender("Could not find FFmpeg executable")
+        self.FailRender("Could not find FFmpeg executable. Set FFMPEG_PATH environment variable or add FFmpeg to system PATH.")
         return ""
 
     def PreRenderTasks(self):
@@ -194,7 +216,13 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
             os.makedirs(destDir)
 
         # Convert sequence pattern to glob pattern
-        globPattern = sourcePattern.replace('%05d', '*').replace('%04d', '*').replace('%03d', '*')
+        # IMPORTANT: Escape brackets before replacing frame numbers, since brackets are glob wildcards
+        # Use placeholders to avoid double-escaping when replacing [ and ]
+        temp_left = '\x00LB\x00'
+        temp_right = '\x00RB\x00'
+        globPattern = sourcePattern.replace('[', temp_left).replace(']', temp_right)
+        globPattern = globPattern.replace(temp_left, '[[]').replace(temp_right, '[]]')
+        globPattern = globPattern.replace('%05d', '*').replace('%04d', '*').replace('%03d', '*')
 
         self.LogInfo("AutoFFmpegTask: Copying files from '{}' to '{}'".format(globPattern, destDir))
 
