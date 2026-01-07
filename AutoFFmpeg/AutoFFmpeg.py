@@ -454,7 +454,8 @@ def buildH265Args(properties, target_width, target_height, enable_gpu=True, crf=
         args.extend(['-c:v', 'libx265'])
         args.extend(['-preset', 'medium'])
         args.extend(['-crf', str(crf)])
-        args.extend(['-x265-params', 'log-level=error'])
+        # Include color metadata in x265-params for proper tagging
+        args.extend(['-x265-params', 'log-level=error:colorprim=bt709:transfer=bt709:colormatrix=bt709'])
 
     vf_filters = []
     if properties and (target_width != properties.get('width', 0) or target_height != properties.get('height', 0)):
@@ -463,8 +464,11 @@ def buildH265Args(properties, target_width, target_height, enable_gpu=True, crf=
     # Add padding to ensure MOD16 alignment for optimal H.265 encoding
     vf_filters.append('pad=ceil(iw/16)*16:ceil(ih/16)*16')
 
-    if vf_filters:
-        args.extend(['-vf', ','.join(vf_filters)])
+    # Tag with BT.709 metadata so players interpret colors correctly (not as linear)
+    # Using setparams filter ensures metadata is set correctly for all encoders including NVENC
+    vf_filters.append('setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709')
+
+    args.extend(['-vf', ','.join(vf_filters)])
 
     args.extend(['-pix_fmt', 'yuv420p'])
     args.extend(['-movflags', '+faststart'])
@@ -500,8 +504,11 @@ def buildH264Args(properties, target_width, target_height, enable_gpu=True, crf=
     # Add padding to ensure MOD16 alignment for optimal H.264 encoding
     vf_filters.append('pad=ceil(iw/16)*16:ceil(ih/16)*16')
 
-    if vf_filters:
-        args.extend(['-vf', ','.join(vf_filters)])
+    # Tag with BT.709 metadata so players interpret colors correctly (not as linear)
+    # Using setparams filter ensures metadata is set correctly for all encoders including NVENC
+    vf_filters.append('setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709')
+
+    args.extend(['-vf', ','.join(vf_filters)])
 
     args.extend(['-pix_fmt', 'yuv420p'])
     args.extend(['-movflags', '+faststart'])
@@ -532,8 +539,10 @@ def buildProResArgs(properties, target_width, target_height, profile='422hq'):
     # Add padding to ensure MOD2 alignment for ProRes encoding
     vf_filters.append('pad=ceil(iw/2)*2:ceil(ih/2)*2')
 
-    if vf_filters:
-        args.extend(['-vf', ','.join(vf_filters)])
+    # Tag with BT.709 metadata so players interpret colors correctly (not as linear)
+    vf_filters.append('setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709')
+
+    args.extend(['-vf', ','.join(vf_filters)])
 
     return args
 
@@ -559,8 +568,10 @@ def buildHAPArgs(properties, target_width, target_height, variant=None):
     # Add padding to ensure MOD4 alignment (REQUIRED for HAP DXT compression)
     vf_filters.append('pad=ceil(iw/4)*4:ceil(ih/4)*4')
 
-    if vf_filters:
-        args.extend(['-vf', ','.join(vf_filters)])
+    # Tag with BT.709 metadata so players interpret colors correctly (not as linear)
+    vf_filters.append('setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709')
+
+    args.extend(['-vf', ','.join(vf_filters)])
 
     # HAP uses RGB(A) pixel format
     if variant == 'alpha':
