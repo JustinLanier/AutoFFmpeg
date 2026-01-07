@@ -460,17 +460,13 @@ def buildH265Args(properties, target_width, target_height, enable_gpu=True, crf=
     if properties and (target_width != properties.get('width', 0) or target_height != properties.get('height', 0)):
         vf_filters.append(f'scale={target_width}:{target_height}')
 
-    vf_filters.append('zscale=tin=linear:t=bt709:m=bt709:r=limited')
-
     # Add padding to ensure MOD16 alignment for optimal H.265 encoding
     vf_filters.append('pad=ceil(iw/16)*16:ceil(ih/16)*16')
 
-    args.extend(['-vf', ','.join(vf_filters)])
+    if vf_filters:
+        args.extend(['-vf', ','.join(vf_filters)])
 
     args.extend(['-pix_fmt', 'yuv420p'])
-    args.extend(['-color_trc', 'bt709'])
-    args.extend(['-color_primaries', 'bt709'])
-    args.extend(['-colorspace', 'bt709'])
     args.extend(['-movflags', '+faststart'])
 
     return args
@@ -501,17 +497,13 @@ def buildH264Args(properties, target_width, target_height, enable_gpu=True, crf=
     if properties and (target_width != properties.get('width', 0) or target_height != properties.get('height', 0)):
         vf_filters.append(f'scale={target_width}:{target_height}')
 
-    vf_filters.append('zscale=tin=linear:t=bt709:m=bt709:r=limited')
-
     # Add padding to ensure MOD16 alignment for optimal H.264 encoding
     vf_filters.append('pad=ceil(iw/16)*16:ceil(ih/16)*16')
 
-    args.extend(['-vf', ','.join(vf_filters)])
+    if vf_filters:
+        args.extend(['-vf', ','.join(vf_filters)])
 
     args.extend(['-pix_fmt', 'yuv420p'])
-    args.extend(['-color_trc', 'bt709'])
-    args.extend(['-color_primaries', 'bt709'])
-    args.extend(['-colorspace', 'bt709'])
     args.extend(['-movflags', '+faststart'])
 
     return args
@@ -537,17 +529,11 @@ def buildProResArgs(properties, target_width, target_height, profile='422hq'):
     if properties and (target_width != properties.get('width', 0) or target_height != properties.get('height', 0)):
         vf_filters.append(f'scale={target_width}:{target_height}')
 
-    # Color space conversion for EXR input
-    vf_filters.append('zscale=tin=linear:t=bt709:m=bt709:r=full')
-
     # Add padding to ensure MOD2 alignment for ProRes encoding
     vf_filters.append('pad=ceil(iw/2)*2:ceil(ih/2)*2')
 
-    args.extend(['-vf', ','.join(vf_filters)])
-
-    args.extend(['-color_trc', 'bt709'])
-    args.extend(['-color_primaries', 'bt709'])
-    args.extend(['-colorspace', 'bt709'])
+    if vf_filters:
+        args.extend(['-vf', ','.join(vf_filters)])
 
     return args
 
@@ -570,13 +556,11 @@ def buildHAPArgs(properties, target_width, target_height, variant=None):
     if properties and (target_width != properties.get('width', 0) or target_height != properties.get('height', 0)):
         vf_filters.append(f'scale={target_width}:{target_height}')
 
-    # Color space conversion
-    vf_filters.append('zscale=tin=linear:t=bt709:m=bt709:r=limited')
-
     # Add padding to ensure MOD4 alignment (REQUIRED for HAP DXT compression)
     vf_filters.append('pad=ceil(iw/4)*4:ceil(ih/4)*4')
 
-    args.extend(['-vf', ','.join(vf_filters)])
+    if vf_filters:
+        args.extend(['-vf', ','.join(vf_filters)])
 
     # HAP uses RGB(A) pixel format
     if variant == 'alpha':
