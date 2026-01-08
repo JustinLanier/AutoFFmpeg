@@ -194,7 +194,7 @@ def findAudioFile(outputDir, baseName, logger=None):
 
     Returns audio file path or None if not found.
     """
-    audio_extensions = ['.wav', '.mp3', '.aac', '.m4a']
+    audio_extensions = ['.wav', '.aif', '.aiff', '.mp3', '.aac', '.m4a']
 
     # Clean up basename (remove codec suffixes and trailing underscores)
     clean_basename = re.sub(r'_(h265|h264|prores|hap)$', '', baseName)

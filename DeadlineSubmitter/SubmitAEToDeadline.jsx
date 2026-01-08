@@ -2765,7 +2765,9 @@
 		return directory + separator + baseName + ".wav";
 	}
 
-	// Export audio from a render queue item to WAV file
+	// Export audio from a render queue item to AIFF file
+	// Uses the built-in "AIFF 48kHz" template which is audio-only
+	// Note: status property is READ-ONLY, use render property instead
 	function exportCompAudio( renderQueueItem )
 	{
 		var result = { success: true, audioPath: null, skipped: false };
@@ -2782,6 +2784,9 @@
 		var videoOutputPath = renderQueueItem.outputModule( 1 ).file.fsName;
 		var audioOutputPath = getAudioOutputPath( videoOutputPath );
 
+		// Change extension to .aif since we're using AIFF 48kHz template
+		audioOutputPath = audioOutputPath.replace( /\.wav$/i, '.aif' );
+
 		// Ensure output directory exists
 		var audioFile = new File( audioOutputPath );
 		var audioDir = audioFile.parent;
@@ -2791,18 +2796,19 @@
 		}
 
 		var audioRQItem = null;
-		var originalStatuses = [];
+		var originalRenderStates = [];
 
 		try
 		{
-			// Store and disable all existing queued items to prevent them from rendering
+			// Store and disable all existing queued items using the "render" property
+			// (status property is read-only, but render property is read/write)
 			for( var i = 1; i <= app.project.renderQueue.numItems; i++ )
 			{
 				var item = app.project.renderQueue.item( i );
-				originalStatuses.push( { index: i, status: item.status } );
-				if( item.status == RQItemStatus.QUEUED )
+				originalRenderStates.push( { index: i, wasQueued: item.render } );
+				if( item.render )
 				{
-					item.status = RQItemStatus.USER_STOPPED;
+					item.render = false;  // Unqueue existing items
 				}
 			}
 
@@ -2813,17 +2819,15 @@
 			audioRQItem.timeSpanStart = renderQueueItem.timeSpanStart;
 			audioRQItem.timeSpanDuration = renderQueueItem.timeSpanDuration;
 
-			// Configure output module for WAV
+			// Configure output module - apply template first, then set file
 			var audioOM = audioRQItem.outputModule( 1 );
-			audioOM.file = audioFile;
 
-			// Try to apply audio-only template - try multiple template names
+			// Try to apply audio-only template
+			// "AIFF 48kHz" is a built-in After Effects template for audio-only export
 			var templateApplied = false;
 			var appliedTemplateName = "";
 			var templatesToTry = [
-				"Audio Only",
 				"AIFF 48kHz",
-				"WAV 48kHz",
 				"Lossless"
 			];
 
@@ -2842,41 +2846,43 @@
 				}
 			}
 
-			// If no template worked, we need to abort
+			// If no template worked, list available templates in error
 			if( !templateApplied )
 			{
+				var availableTemplates = audioOM.templates.join( ", " );
 				audioRQItem.remove();
-				// Restore original statuses
-				for( var i = 0; i < originalStatuses.length; i++ )
+				// Restore original render states
+				for( var i = 0; i < originalRenderStates.length; i++ )
 				{
-					var item = app.project.renderQueue.item( originalStatuses[i].index );
-					if( originalStatuses[i].status == RQItemStatus.QUEUED )
+					if( originalRenderStates[i].wasQueued )
 					{
-						item.status = RQItemStatus.QUEUED;
+						app.project.renderQueue.item( originalRenderStates[i].index ).render = true;
 					}
 				}
 				result.success = false;
-				result.error = "No audio template found. Tried: " + templatesToTry.join( ", " );
+				result.error = "No audio template found. Available: " + availableTemplates;
 				return result;
 			}
 
-			// Queue the audio item
-			audioRQItem.status = RQItemStatus.QUEUED;
+			// Set the output file path after applying template
+			audioOM.file = audioFile;
+
+			// Queue the audio item for rendering using render property (not status)
+			audioRQItem.render = true;
 
 			// Render the queue (only our audio item should be queued now)
 			app.project.renderQueue.render();
 
-			// Remove the audio render queue item
+			// Remove the audio render queue item (it's now in DONE state)
 			audioRQItem.remove();
 			audioRQItem = null;
 
-			// Restore original statuses
-			for( var i = 0; i < originalStatuses.length; i++ )
+			// Restore original render states
+			for( var i = 0; i < originalRenderStates.length; i++ )
 			{
-				var item = app.project.renderQueue.item( originalStatuses[i].index );
-				if( originalStatuses[i].status == RQItemStatus.QUEUED )
+				if( originalRenderStates[i].wasQueued )
 				{
-					item.status = RQItemStatus.QUEUED;
+					app.project.renderQueue.item( originalRenderStates[i].index ).render = true;
 				}
 			}
 
@@ -2900,15 +2906,14 @@
 			{
 				try { audioRQItem.remove(); } catch( cleanupErr ) {}
 			}
-			// Restore original statuses
+			// Restore original render states
 			try
 			{
-				for( var i = 0; i < originalStatuses.length; i++ )
+				for( var i = 0; i < originalRenderStates.length; i++ )
 				{
-					var item = app.project.renderQueue.item( originalStatuses[i].index );
-					if( originalStatuses[i].status == RQItemStatus.QUEUED )
+					if( originalRenderStates[i].wasQueued )
 					{
-						item.status = RQItemStatus.QUEUED;
+						app.project.renderQueue.item( originalRenderStates[i].index ).render = true;
 					}
 				}
 			}
