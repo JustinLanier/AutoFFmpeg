@@ -2766,8 +2766,9 @@
 		var result = { success: true, audioPath: null, skipped: false };
 		var comp = renderQueueItem.comp;
 
-		// Silent skip if no audio
-		if( !compHasAudio( comp ) )
+		// Check if comp has audio
+		var hasAudio = compHasAudio( comp );
+		if( !hasAudio )
 		{
 			result.skipped = true;
 			return result;
@@ -2798,8 +2799,37 @@
 			var audioOM = audioRQItem.outputModule( 1 );
 			audioOM.file = audioFile;
 
-			// Apply audio-only template
-			audioOM.applyTemplate( "_HIDDEN X-AO 48k (Lossless)" );
+			// Try to apply audio-only template - try multiple template names
+			var templateApplied = false;
+			var templatesToTry = [
+				"Audio Only",
+				"AIFF 48kHz",
+				"WAV 48kHz",
+				"Lossless"
+			];
+
+			for( var t = 0; t < templatesToTry.length; t++ )
+			{
+				try
+				{
+					audioOM.applyTemplate( templatesToTry[t] );
+					templateApplied = true;
+					break;
+				}
+				catch( templateErr )
+				{
+					// Template doesn't exist, try next
+				}
+			}
+
+			// If no template worked, we need to abort
+			if( !templateApplied )
+			{
+				audioRQItem.remove();
+				result.success = false;
+				result.error = "No audio template found";
+				return result;
+			}
 
 			// Temporarily disable original item to prevent rendering
 			renderQueueItem.render = false;
@@ -2822,11 +2852,13 @@
 			else
 			{
 				result.success = false;
+				result.error = "Audio file not created at: " + audioOutputPath;
 			}
 		}
 		catch( e )
 		{
 			result.success = false;
+			result.error = e.toString();
 			// Cleanup on error
 			if( audioRQItem )
 			{
@@ -2844,6 +2876,7 @@
 	{
 		var exportedCount = 0;
 		var skippedCount = 0;
+		var errors = [];
 
 		for( var i = 1; i <= app.project.renderQueue.numItems; i++ )
 		{
@@ -2864,8 +2897,22 @@
 			{
 				exportedCount++;
 			}
+			else if( result.error )
+			{
+				errors.push( rqItem.comp.name + ": " + result.error );
+			}
 		}
 
-		return { exported: exportedCount, skipped: skippedCount };
+		// Debug: Show what happened (remove this after debugging)
+		var debugMsg = "Audio Export Debug:\n";
+		debugMsg += "Exported: " + exportedCount + "\n";
+		debugMsg += "Skipped (no audio): " + skippedCount + "\n";
+		if( errors.length > 0 )
+		{
+			debugMsg += "Errors:\n" + errors.join( "\n" );
+		}
+		alert( debugMsg );
+
+		return { exported: exportedCount, skipped: skippedCount, errors: errors };
 	}
 } 
