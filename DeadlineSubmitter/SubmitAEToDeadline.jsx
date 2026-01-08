@@ -2791,12 +2791,25 @@
 		}
 
 		var audioRQItem = null;
+		var originalStatuses = [];
+
 		try
 		{
+			// Store and disable all existing queued items to prevent them from rendering
+			for( var i = 1; i <= app.project.renderQueue.numItems; i++ )
+			{
+				var item = app.project.renderQueue.item( i );
+				originalStatuses.push( { index: i, status: item.status } );
+				if( item.status == RQItemStatus.QUEUED )
+				{
+					item.status = RQItemStatus.USER_STOPPED;
+				}
+			}
+
 			// Create temporary render queue item for audio export
 			audioRQItem = app.project.renderQueue.items.add( comp );
 
-			// Match time span settings
+			// Match time span settings from original
 			audioRQItem.timeSpanStart = renderQueueItem.timeSpanStart;
 			audioRQItem.timeSpanDuration = renderQueueItem.timeSpanDuration;
 
@@ -2806,6 +2819,7 @@
 
 			// Try to apply audio-only template - try multiple template names
 			var templateApplied = false;
+			var appliedTemplateName = "";
 			var templatesToTry = [
 				"Audio Only",
 				"AIFF 48kHz",
@@ -2819,6 +2833,7 @@
 				{
 					audioOM.applyTemplate( templatesToTry[t] );
 					templateApplied = true;
+					appliedTemplateName = templatesToTry[t];
 					break;
 				}
 				catch( templateErr )
@@ -2831,23 +2846,39 @@
 			if( !templateApplied )
 			{
 				audioRQItem.remove();
+				// Restore original statuses
+				for( var i = 0; i < originalStatuses.length; i++ )
+				{
+					var item = app.project.renderQueue.item( originalStatuses[i].index );
+					if( originalStatuses[i].status == RQItemStatus.QUEUED )
+					{
+						item.status = RQItemStatus.QUEUED;
+					}
+				}
 				result.success = false;
-				result.error = "No audio template found";
+				result.error = "No audio template found. Tried: " + templatesToTry.join( ", " );
 				return result;
 			}
 
-			// Temporarily disable original item to prevent rendering
-			renderQueueItem.render = false;
+			// Queue the audio item
+			audioRQItem.status = RQItemStatus.QUEUED;
 
-			// Render audio
+			// Render the queue (only our audio item should be queued now)
 			app.project.renderQueue.render();
 
-			// Restore original item
-			renderQueueItem.render = true;
-
-			// Remove temporary audio queue item
+			// Remove the audio render queue item
 			audioRQItem.remove();
 			audioRQItem = null;
+
+			// Restore original statuses
+			for( var i = 0; i < originalStatuses.length; i++ )
+			{
+				var item = app.project.renderQueue.item( originalStatuses[i].index );
+				if( originalStatuses[i].status == RQItemStatus.QUEUED )
+				{
+					item.status = RQItemStatus.QUEUED;
+				}
+			}
 
 			// Verify audio file was created
 			if( audioFile.exists )
@@ -2857,7 +2888,7 @@
 			else
 			{
 				result.success = false;
-				result.error = "Audio file not created at: " + audioOutputPath;
+				result.error = "Audio file not created at: " + audioOutputPath + " (template: " + appliedTemplateName + ")";
 			}
 		}
 		catch( e )
@@ -2869,8 +2900,19 @@
 			{
 				try { audioRQItem.remove(); } catch( cleanupErr ) {}
 			}
-			// Restore original item
-			try { renderQueueItem.render = true; } catch( restoreErr ) {}
+			// Restore original statuses
+			try
+			{
+				for( var i = 0; i < originalStatuses.length; i++ )
+				{
+					var item = app.project.renderQueue.item( originalStatuses[i].index );
+					if( originalStatuses[i].status == RQItemStatus.QUEUED )
+					{
+						item.status = RQItemStatus.QUEUED;
+					}
+				}
+			}
+			catch( restoreErr ) {}
 		}
 
 		return result;
