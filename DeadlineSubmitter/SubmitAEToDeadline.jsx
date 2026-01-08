@@ -1390,7 +1390,13 @@
 					// Save the project before submission
 					app.project.save( app.project.file );
 				}
-				
+
+				// Auto-export audio if AutoFFmpeg is enabled with audio option
+				if( dialog.autoFFmpegEnable.value && dialog.autoFFmpegAudio.value )
+				{
+					exportAudioForRenderQueue();
+				}
+
 				var totalJobs = app.project.renderQueue.numItems;
 				queuedCount
 				
@@ -2662,7 +2668,7 @@
 	function checkForDuplicateComps()
 	{
 		var duplicateFound = false;
-		
+
 		// Ensure that no 2 queued comps in the Render Queue have the same name
 		var compItem1;
 		var compItem2;
@@ -2676,7 +2682,7 @@
 			{
 				if( app.project.renderQueue.item( j ).status != RQItemStatus.QUEUED )
 					continue;
-				
+
 				compItem2 = app.project.renderQueue.item( j ).comp;
 				if( compItem1.name == compItem2.name )
 				{
@@ -2684,11 +2690,182 @@
 					break;
 				}
 			}
-			
+
 			if( duplicateFound )
 				break;
 		}
-		
+
 		return duplicateFound;
+	}
+
+	/**************** AUDIO EXPORT FUNCTIONS ****************/
+
+	// Check if a composition contains any enabled audio layers
+	function compHasAudio( comp )
+	{
+		for( var i = 1; i <= comp.numLayers; i++ )
+		{
+			var layer = comp.layer( i );
+			if( layer.hasAudio && layer.audioEnabled )
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Calculate the audio output path based on video output path
+	// Places WAV file in Audio/Mixes folder for template projects, otherwise same directory as video
+	function getAudioOutputPath( videoOutputPath )
+	{
+		var videoFile = new File( videoOutputPath );
+		var directory = videoFile.parent.fsName;
+		var baseName = videoFile.name;
+		var separator = ( $.os.indexOf( "Windows" ) !== -1 ) ? "\\" : "/";
+
+		// Remove extension
+		var extIndex = baseName.lastIndexOf( '.' );
+		if( extIndex > 0 )
+		{
+			baseName = baseName.substring( 0, extIndex );
+		}
+
+		// Remove frame number padding (e.g., _##### or [#####])
+		baseName = baseName.replace( /[_\[]?#+\]?/g, '' );
+		baseName = baseName.replace( /_+$/, '' );
+
+		// Check if project is in the Active Jobs template structure
+		var projectPath = app.project.file ? app.project.file.fsName : "";
+		var templateBase = "G:\\_Active Jobs\\_Active Jobs Template";
+
+		if( projectPath.indexOf( templateBase ) === 0 )
+		{
+			// Project is in template structure - find the job root folder
+			// Template structure: G:\_Active Jobs\_Active Jobs Template\[JobFolder]\...
+			var relativePath = projectPath.substring( templateBase.length + 1 );
+			var jobFolder = relativePath.split( separator )[0];
+			var audioMixesPath = templateBase + separator + jobFolder + separator + "Audio" + separator + "Mixes";
+
+			// Create Audio/Mixes folder if it doesn't exist
+			var audioMixesFolder = new Folder( audioMixesPath );
+			if( !audioMixesFolder.exists )
+			{
+				audioMixesFolder.create();
+			}
+
+			return audioMixesPath + separator + baseName + ".wav";
+		}
+
+		// Default: same directory as video output
+		return directory + separator + baseName + ".wav";
+	}
+
+	// Export audio from a render queue item to WAV file
+	function exportCompAudio( renderQueueItem )
+	{
+		var result = { success: true, audioPath: null, skipped: false };
+		var comp = renderQueueItem.comp;
+
+		// Silent skip if no audio
+		if( !compHasAudio( comp ) )
+		{
+			result.skipped = true;
+			return result;
+		}
+
+		var videoOutputPath = renderQueueItem.outputModule( 1 ).file.fsName;
+		var audioOutputPath = getAudioOutputPath( videoOutputPath );
+
+		// Ensure output directory exists
+		var audioFile = new File( audioOutputPath );
+		var audioDir = audioFile.parent;
+		if( !audioDir.exists )
+		{
+			audioDir.create();
+		}
+
+		var audioRQItem = null;
+		try
+		{
+			// Create temporary render queue item for audio export
+			audioRQItem = app.project.renderQueue.items.add( comp );
+
+			// Match time span settings
+			audioRQItem.timeSpanStart = renderQueueItem.timeSpanStart;
+			audioRQItem.timeSpanDuration = renderQueueItem.timeSpanDuration;
+
+			// Configure output module for WAV
+			var audioOM = audioRQItem.outputModule( 1 );
+			audioOM.file = audioFile;
+
+			// Apply audio-only template
+			audioOM.applyTemplate( "_HIDDEN X-AO 48k (Lossless)" );
+
+			// Temporarily disable original item to prevent rendering
+			renderQueueItem.render = false;
+
+			// Render audio
+			app.project.renderQueue.render();
+
+			// Restore original item
+			renderQueueItem.render = true;
+
+			// Remove temporary audio queue item
+			audioRQItem.remove();
+			audioRQItem = null;
+
+			// Verify audio file was created
+			if( audioFile.exists )
+			{
+				result.audioPath = audioOutputPath;
+			}
+			else
+			{
+				result.success = false;
+			}
+		}
+		catch( e )
+		{
+			result.success = false;
+			// Cleanup on error
+			if( audioRQItem )
+			{
+				try { audioRQItem.remove(); } catch( cleanupErr ) {}
+			}
+			// Restore original item
+			try { renderQueueItem.render = true; } catch( restoreErr ) {}
+		}
+
+		return result;
+	}
+
+	// Export audio for all queued render items
+	function exportAudioForRenderQueue()
+	{
+		var exportedCount = 0;
+		var skippedCount = 0;
+
+		for( var i = 1; i <= app.project.renderQueue.numItems; i++ )
+		{
+			var rqItem = app.project.renderQueue.item( i );
+
+			if( rqItem.status != RQItemStatus.QUEUED )
+			{
+				continue;
+			}
+
+			var result = exportCompAudio( rqItem );
+
+			if( result.skipped )
+			{
+				skippedCount++;
+			}
+			else if( result.audioPath )
+			{
+				exportedCount++;
+			}
+		}
+
+		return { exported: exportedCount, skipped: skippedCount };
 	}
 } 

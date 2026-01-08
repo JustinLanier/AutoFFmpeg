@@ -164,6 +164,23 @@ def parseFilenameTokens(filename):
     return result
 
 
+def findAudioMixesFolder(outputDir):
+    """
+    Search upward from outputDir for Audio/Mixes folder.
+    Returns path to Audio/Mixes if found, or empty string if not.
+    """
+    current = outputDir
+    for _ in range(10):  # Limit search depth
+        audio_mixes = os.path.join(current, 'Audio', 'Mixes')
+        if os.path.isdir(audio_mixes):
+            return audio_mixes
+        parent = os.path.dirname(current)
+        if parent == current:  # Reached root
+            break
+        current = parent
+    return ''
+
+
 def findAudioFile(outputDir, baseName, logger=None):
     """
     Search for audio file matching the video output.
@@ -173,6 +190,7 @@ def findAudioFile(outputDir, baseName, logger=None):
     2. Same directory: audio.wav, audio.mp3
     3. audio subdirectory: audio/baseName.wav, audio/baseName.mp3
     4. Parent audio directory: ../audio/baseName.wav
+    5. Audio/Mixes folder in job structure (searches upward)
 
     Returns audio file path or None if not found.
     """
@@ -187,6 +205,9 @@ def findAudioFile(outputDir, baseName, logger=None):
         logger('Audio search - Cleaned basename: {}'.format(clean_basename))
         logger('Audio search - Output directory: {}'.format(outputDir))
 
+    # Find Audio/Mixes folder if it exists in parent structure
+    audio_mixes_folder = findAudioMixesFolder(outputDir)
+
     # Search patterns in priority order
     search_patterns = [
         # 1. Exact match in same directory
@@ -198,6 +219,8 @@ def findAudioFile(outputDir, baseName, logger=None):
         (os.path.join(outputDir, 'audio'), 'audio'),
         # 4. Parent audio directory
         (os.path.join(os.path.dirname(outputDir), 'audio'), clean_basename),
+        # 5. Audio/Mixes folder in job structure
+        (audio_mixes_folder, clean_basename),
     ]
 
     for search_dir, name in search_patterns:
