@@ -92,8 +92,10 @@ Split long sequences into chunks for faster encoding:
 - More overhead but works with standard FFmpeg plugin
 
 ### Audio Support
-- Automatic audio file detection (WAV, MP3, AAC, M4A)
-- Searches same directory, audio subdirectory, and parent audio directory
+- **Automatic audio export** from After Effects when submitting with "Include Audio" enabled
+- Audio files placed in `Audio/Mixes` folder for Active Jobs structure projects
+- Automatic audio file detection (WAV, AIFF, MP3, AAC, M4A)
+- Searches: same directory, `audio/` subdirectory, parent `audio/` directory, and `Audio/Mixes` folder
 - Configurable audio codec and bitrate
 
 ### Flexible Triggering Modes
@@ -123,11 +125,20 @@ Required for task-based parallel encoding:
    {DeadlineRepository}/custom/plugins/AutoFFmpegTask/
    ```
 
+### After Effects Submitter (Optional)
+For automatic audio export from After Effects:
+1. Copy `DeadlineSubmitter/SubmitAEToDeadline.jsx` to your Deadline repository:
+   ```
+   {DeadlineRepository}/submission/AfterEffects/Main/SubmitAEToDeadline.jsx
+   ```
+2. When submitting with AutoFFmpeg enabled and "Include Audio" checked, audio is automatically exported
+
 ### FFmpeg
 Ensure FFmpeg is installed and accessible:
 - Add to system PATH, or
 - Place in `C:\ffmpeg\bin\` (Windows), or
-- Configure path in plugin settings
+- Configure path in plugin settings, or
+- Use a shared network location (supports both mapped drives and UNC paths)
 
 ## Configuration
 
@@ -183,7 +194,13 @@ Access plugin settings in Deadline Monitor:
 3. Set Concurrent Tasks (e.g., 3 for GPU encoding)
 4. Long sequences will be split and encoded in parallel
 
-### With Audio
+### With Audio (After Effects)
+1. Check "Include Audio" in the AutoFFmpeg section of the AE submitter
+2. Audio is automatically exported from your comp before submission
+3. For Active Jobs projects, audio goes to `[JobFolder]/Audio/Mixes/`
+4. Audio is automatically muxed into the final video
+
+### With Audio (Manual)
 1. Enable "Enable Audio Search" or use `[audio]` token
 2. Place audio file in same directory as video: `ProjectName.wav`
 3. Audio will be automatically muxed into final video
@@ -220,6 +237,11 @@ Access plugin settings in Deadline Monitor:
 - Automatic chunk cleanup
 
 ### Recent Improvements
+- **Automated audio export** from After Effects compositions
+- Audio placed in `Audio/Mixes` folder for Active Jobs structure
+- Cross-machine FFmpeg support (mapped drives and UNC paths)
+- Python 3 compatibility for all Deadline workers
+- Fixed chunk cleanup for separate concat job workflow
 - Token detection in Global Enabled mode
 - Fixed glob pattern escaping for square brackets
 - Improved path handling for Windows
@@ -248,6 +270,17 @@ Access plugin settings in Deadline Monitor:
 - Verify "Keep Intermediate Chunks" is False
 - Check file permissions
 - Review task log for cleanup errors
+
+### Audio not muxed into video
+- Verify audio file exists in expected location
+- Check audio filename matches video basename
+- For AE: Ensure "Include Audio" was checked and comp has audio layers
+- Review AutoFFmpeg event log for audio search results
+
+### FFmpeg not found on some workers
+- Add UNC path to plugin config (e.g., `\\server\share\ffmpeg.exe`)
+- Or ensure FFmpeg is installed locally on all workers
+- Check Deadline path mapping settings
 
 ## Credits
 
