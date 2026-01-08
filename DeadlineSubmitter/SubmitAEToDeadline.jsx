@@ -2730,9 +2730,14 @@
 			baseName = baseName.substring( 0, extIndex );
 		}
 
-		// Remove frame number padding (e.g., _##### or [#####])
-		baseName = baseName.replace( /[_\[]?#+\]?/g, '' );
-		baseName = baseName.replace( /_+$/, '' );
+		// Remove frame number padding patterns:
+		// [#####] -> AE style with brackets
+		// _##### -> underscore prefix style
+		// ##### -> plain hash padding
+		baseName = baseName.replace( /\[#+\]/g, '' );  // Remove [#####]
+		baseName = baseName.replace( /_#+/g, '' );     // Remove _#####
+		baseName = baseName.replace( /#+/g, '' );      // Remove any remaining #####
+		baseName = baseName.replace( /_+$/, '' );      // Remove trailing underscores
 
 		// Check if project is in the Active Jobs template structure
 		var projectPath = app.project.file ? app.project.file.fsName : "";
