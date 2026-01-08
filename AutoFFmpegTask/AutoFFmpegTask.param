@@ -7,13 +7,23 @@ Index=0
 Default=AutoFFmpegTask - Task-aware FFmpeg encoding plugin for parallel chunk processing
 Description=AutoFFmpegTask - Task-aware FFmpeg encoding plugin for parallel chunk processing
 
+[PythonVersion]
+Type=enum
+Values=3
+Label=Python Version
+Category=About Plugin
+CategoryOrder=-1
+Index=1
+Default=3
+Description=Python interpreter version to use (must be 3)
+
 [FFmpegExecutable]
 Type=filename
 Label=FFmpeg Executable
 Category=FFmpeg Settings
 CategoryOrder=0
 CategoryIndex=0
-Default=
+Default=G:\test\JL\Installers\ffmpeg-n8.0-latest-win64-gpl-8.0\bin\ffmpeg.exe
 Description=Path to FFmpeg executable. Leave blank to auto-detect from PATH or common locations.
 
 [EnableLocalRendering]

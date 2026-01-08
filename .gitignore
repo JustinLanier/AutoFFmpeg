@@ -1,3 +1,19 @@
-.claude/settings.local.json
-_fresh_tests/test_x264_params.mp4
-_fresh_tests/test_with_metadata.mp4
+# Claude Code settings
+.claude/
+
+# Test output files
+_fresh_tests/
+
+# Log sync utilities (not core to AutoFFmpeg)
+LOG_LOCATIONS.md
+LOG_SYNC_SETUP.md
+sync-deadline-logs.ps1
+setup-log-sync-task.ps1
+
+# Claude GitHub workflows
+.github/workflows/claude*.yml
+
+# Temp files
+nul
+*.log
+*.tmp

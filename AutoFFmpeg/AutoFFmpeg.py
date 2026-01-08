@@ -196,9 +196,27 @@ def findAudioFile(outputDir, baseName, logger=None):
     """
     audio_extensions = ['.wav', '.aif', '.aiff', '.mp3', '.aac', '.m4a']
 
-    # Clean up basename (remove codec suffixes and trailing underscores)
-    clean_basename = re.sub(r'_(h265|h264|prores|hap)$', '', baseName)
-    clean_basename = clean_basename.rstrip('_')  # Remove trailing underscores
+    # Clean up basename to match audio file naming
+    # Input might be like: "inflate5_Main_Main4_#####.exr_preview_h265"
+    # We want: "inflate5_Main_Main4"
+    clean_basename = baseName
+
+    # Remove codec suffixes (case insensitive)
+    clean_basename = re.sub(r'_(h265|h264|prores|hap)$', '', clean_basename, flags=re.IGNORECASE)
+
+    # Remove _preview suffix
+    clean_basename = re.sub(r'_preview$', '', clean_basename, flags=re.IGNORECASE)
+
+    # Remove file extensions that might be embedded (e.g., .exr in the middle)
+    clean_basename = re.sub(r'\.(exr|tif|tiff|png|jpg|jpeg|dpx|tga)($|_)', r'\2', clean_basename, flags=re.IGNORECASE)
+
+    # Remove frame number patterns: _#####, _00000, [#####], etc.
+    clean_basename = re.sub(r'_#+', '', clean_basename)  # _##### or _###
+    clean_basename = re.sub(r'_\d+$', '', clean_basename)  # _00000 at end
+    clean_basename = re.sub(r'\[#+\]', '', clean_basename)  # [#####]
+
+    # Remove trailing underscores
+    clean_basename = clean_basename.rstrip('_')
 
     if logger:
         logger('Audio search - Original basename: {}'.format(baseName))

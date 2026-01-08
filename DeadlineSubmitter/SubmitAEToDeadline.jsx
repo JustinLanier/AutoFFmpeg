@@ -2730,6 +2730,10 @@
 			baseName = baseName.substring( 0, extIndex );
 		}
 
+		// Decode URL-encoded characters (AE sometimes encodes brackets)
+		baseName = baseName.replace( /%5B/gi, '[' );
+		baseName = baseName.replace( /%5D/gi, ']' );
+
 		// Remove frame number padding patterns:
 		// [#####] -> AE style with brackets
 		// _##### -> underscore prefix style
@@ -2739,17 +2743,20 @@
 		baseName = baseName.replace( /#+/g, '' );      // Remove any remaining #####
 		baseName = baseName.replace( /_+$/, '' );      // Remove trailing underscores
 
-		// Check if project is in the Active Jobs template structure
+		// Check if project is in the Active Jobs structure (any job folder)
+		// Normalize paths to use backslashes for comparison on Windows
 		var projectPath = app.project.file ? app.project.file.fsName : "";
-		var templateBase = "G:\\_Active Jobs\\_Active Jobs Template";
+		projectPath = projectPath.replace( /\//g, "\\" );  // Normalize to backslashes
 
-		if( projectPath.indexOf( templateBase ) === 0 )
+		var activeJobsBase = "G:\\_Active Jobs\\";
+
+		if( projectPath.indexOf( activeJobsBase ) === 0 )
 		{
-			// Project is in template structure - find the job root folder
-			// Template structure: G:\_Active Jobs\_Active Jobs Template\[JobFolder]\...
-			var relativePath = projectPath.substring( templateBase.length + 1 );
-			var jobFolder = relativePath.split( separator )[0];
-			var audioMixesPath = templateBase + separator + jobFolder + separator + "Audio" + separator + "Mixes";
+			// Project is in Active Jobs - find the job root folder
+			// Structure: G:\_Active Jobs\[JobFolder]\...
+			var relativePath = projectPath.substring( activeJobsBase.length );
+			var jobFolder = relativePath.split( "\\" )[0];
+			var audioMixesPath = activeJobsBase + jobFolder + "\\Audio\\Mixes";
 
 			// Create Audio/Mixes folder if it doesn't exist
 			var audioMixesFolder = new Folder( audioMixesPath );
@@ -2758,11 +2765,11 @@
 				audioMixesFolder.create();
 			}
 
-			return audioMixesPath + separator + baseName + ".wav";
+			return audioMixesPath + "\\" + baseName + ".wav";
 		}
 
 		// Default: same directory as video output
-		return directory + separator + baseName + ".wav";
+		return directory + "\\" + baseName + ".wav";
 	}
 
 	// Export audio from a render queue item to AIFF file
@@ -2954,16 +2961,6 @@
 				errors.push( rqItem.comp.name + ": " + result.error );
 			}
 		}
-
-		// Debug: Show what happened (remove this after debugging)
-		var debugMsg = "Audio Export Debug:\n";
-		debugMsg += "Exported: " + exportedCount + "\n";
-		debugMsg += "Skipped (no audio): " + skippedCount + "\n";
-		if( errors.length > 0 )
-		{
-			debugMsg += "Errors:\n" + errors.join( "\n" );
-		}
-		alert( debugMsg );
 
 		return { exported: exportedCount, skipped: skippedCount, errors: errors };
 	}

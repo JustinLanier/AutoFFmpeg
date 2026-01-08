@@ -1,7 +1,13 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 AutoFFmpegTask - Task-aware FFmpeg plugin for Deadline
 Handles chunk encoding and concatenation within a single job
+
+Python 3 compatible.
 """
+
+from __future__ import print_function, division, absolute_import
 
 from Deadline.Plugins import DeadlinePlugin
 from Deadline.Scripting import RepositoryUtils
@@ -56,16 +62,25 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
 
         # Priority 2: Check plugin configuration
         ffmpegExe = self.GetConfigEntry("FFmpegExecutable")
+        self.LogInfo("AutoFFmpegTask: Plugin config FFmpegExecutable = '{}'".format(ffmpegExe))
         if ffmpegExe:
             # Apply path mapping for remote workers
             mappedExe = self.MapPath(ffmpegExe)
+            self.LogInfo("AutoFFmpegTask: After path mapping = '{}'".format(mappedExe))
             if os.path.isfile(mappedExe):
                 self.LogInfo("AutoFFmpegTask: Using FFmpeg from plugin config: {}".format(mappedExe))
                 return mappedExe
+            else:
+                self.LogWarning("AutoFFmpegTask: Plugin config path not found: {}".format(mappedExe))
 
         # Priority 3: Try common paths (also apply path mapping)
         self.LogInfo("AutoFFmpegTask: Checking common FFmpeg installation paths")
         commonPaths = [
+            # Server/network paths - mapped drive and UNC variants
+            r"G:\test\JL\Installers\ffmpeg-n8.0-latest-win64-gpl-8.0\bin\ffmpeg.exe",
+            r"\\192.168.1.26\test\JL\Installers\ffmpeg-n8.0-latest-win64-gpl-8.0\bin\ffmpeg.exe",
+            r"\\pure-graphics\test\JL\Installers\ffmpeg-n8.0-latest-win64-gpl-8.0\bin\ffmpeg.exe",
+            # Local paths
             r"C:\ffmpeg\bin\ffmpeg.exe",
             r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
             "/usr/bin/ffmpeg",
@@ -452,9 +467,14 @@ class AutoFFmpegTaskPlugin(DeadlinePlugin):
                     self.CleanupLocalFiles(self.localRenderDir)
 
         # If this was the concat task, optionally clean up chunks
-        if currentTask >= numChunks:
+        # For combined jobs: concat task is currentTask >= numChunks
+        # For separate concat job: IsConcatJob is True and currentTask is 0
+        isConcatJob = self.GetPluginInfoEntryWithDefault("IsConcatJob", "False").lower() == "true"
+        isConcatTask = isConcatJob or (currentTask >= numChunks)
+
+        if isConcatTask:
             keepChunks = self.GetPluginInfoEntryWithDefault("KeepChunks", "False").lower() == "true"
-            self.LogInfo("AutoFFmpegTask: Concat task finished. KeepChunks={}".format(keepChunks))
+            self.LogInfo("AutoFFmpegTask: Concat task finished (isConcatJob={}, currentTask={}, numChunks={}). KeepChunks={}".format(isConcatJob, currentTask, numChunks, keepChunks))
 
             if not keepChunks:
                 outputDir = self.GetPluginInfoEntry("OutputDirectory")
